@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<info>
+  <id>timesheets</id>
+  <name>Timesheets</name>
+  <summary>Track employee shifts, job time, and shop time</summary>
+  <description>Employee timesheets with Sales Order job tracking, printable views, and yearly workbooks.</description>
+  <version>0.1.0</version>
+  <licence>agpl</licence>
+  <author>foxhoundv</author>
+  <namespace>Timesheets</namespace>
+  <category>office</category>
+  <website>https://github.com/foxhoundv/nextcloud-timesheets</website>
+  <bugs>https://github.com/foxhoundv/nextcloud-timesheets/issues</bugs>
+  <dependencies>
+    <nextcloud min-version="34" />
+  </dependencies>
+</info>
