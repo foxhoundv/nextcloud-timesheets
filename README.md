@@ -22,6 +22,22 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 - Employees use a print-ready app view; only administrators can access or edit workbook files.
 - Job workbooks are saved in each Sales Order folder under Time logs.
 
+## Development workflow
+
+1. Clone the repository and check out the `main` branch.
+2. Place this app in your Nextcloud `apps/` directory, for example `nextcloud/apps/timesheets`.
+3. Enable the app in the Nextcloud admin UI or via the CLI:
+   `php occ app:enable timesheets`
+4. Use a local Nextcloud 35 development instance for feature work, while keeping the app compatible with Nextcloud 34+.
+5. Run PHP syntax checks during development:
+   `php -l lib/AppInfo/Application.php`
+   `php -l lib/Controller/PageController.php`
+   `php -l lib/Db/Shift.php`
+   `php -l lib/Db/ShiftMapper.php`
+   `php -l lib/Service/ShiftService.php`
+   `php -l lib/Settings/AdminSettings.php`
+6. Commit changes with descriptive messages and push to GitHub when ready.
+
 ## Development status
 
 This repository currently contains the initial app shell. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Database schema, access controls, clock flows, storage integration, printable views, and workbook generation are planned next.

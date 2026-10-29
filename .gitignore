@@ -1,0 +1,30 @@
+# OS / editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# PHP / Nextcloud app build outputs
+vendor/
+composer.lock
+node_modules/
+coverage/
+.phpunit.result.cache
+
+# Local runtime data
+data/
+appdata_*/
+tmp/
+cache/
+logs/
+
+# Build artifacts
+build/
+dist/
+*.log
+
+# Generated files
+*.tmp
+*.bak
