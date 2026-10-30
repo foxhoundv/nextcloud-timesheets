@@ -4,7 +4,7 @@
   <name>Timesheets</name>
   <summary>Track employee shifts, job time, and shop time</summary>
   <description>Employee timesheets with Sales Order job tracking, printable views, and yearly workbooks.</description>
-  <version>0.1.0</version>
+  <version>0.1.1</version>
   <licence>agpl</licence>
   <author>foxhoundv</author>
   <namespace>Timesheets</namespace>
