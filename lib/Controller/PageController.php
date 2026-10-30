@@ -17,6 +17,22 @@ class PageController extends Controller {
     }
 
     public function index(): TemplateResponse {
-        return new TemplateResponse('timesheets', 'main');
+        $stats = [
+            ['label' => 'This week', 'value' => '32.5h'],
+            ['label' => 'Job time', 'value' => '18.0h'],
+            ['label' => 'Shop time', 'value' => '14.5h'],
+            ['label' => 'Open shifts', 'value' => '2'],
+        ];
+
+        $entries = [
+            ['date' => '2026-10-29', 'shift' => 'Morning shift', 'total' => '7.5h', 'status' => 'Closed'],
+            ['date' => '2026-10-28', 'shift' => 'Swing shift', 'total' => '8.0h', 'status' => 'Closed'],
+            ['date' => '2026-10-27', 'shift' => 'Open shift', 'total' => '4.0h', 'status' => 'In progress'],
+        ];
+
+        return new TemplateResponse('timesheets', 'main', [
+            'stats' => $stats,
+            'entries' => $entries,
+        ]);
     }
 }
