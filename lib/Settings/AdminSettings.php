@@ -6,11 +6,13 @@ namespace OCA\Timesheets\Settings;
 
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
+use OCP\IURLGenerator;
 use OCP\Settings\ISettings;
 
 class AdminSettings implements ISettings {
     public function __construct(
         private IConfig $config,
+        private IURLGenerator $urlGenerator,
     ) {
     }
 
@@ -23,7 +25,10 @@ class AdminSettings implements ISettings {
             'net_shift_threshold' => (int) $this->config->getAppValue('timesheets', 'net_shift_threshold', '0'),
         ];
 
-        return new TemplateResponse('timesheets', 'settings/admin', ['settings' => $settings]);
+        return new TemplateResponse('timesheets', 'settings/admin', [
+            'settings' => $settings,
+            'saveUrl' => $this->urlGenerator->linkToRoute('timesheets.admin.save'),
+        ]);
     }
 
     public function getSection(): string {

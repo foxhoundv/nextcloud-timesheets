@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use OCA\Timesheets\Settings\AdminSection;
 use OCA\Timesheets\Settings\AdminSettings;
+use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IDBConnection;
 use OCP\IGroupManager;
@@ -75,6 +76,11 @@ function request(string $path, ?array $payload = null, ?string $token = null): a
     global $baseUrl, $cookieFile;
     $curl = curl_init($baseUrl . $path);
     $headers = ['Accept: text/html, application/json'];
+    if ($payload !== null) {
+        $origin = parse_url($baseUrl, PHP_URL_SCHEME) . '://' . parse_url($baseUrl, PHP_URL_HOST);
+        $port = parse_url($baseUrl, PHP_URL_PORT);
+        $headers[] = 'Origin: ' . $origin . ($port !== null ? ':' . $port : '');
+    }
     if ($token !== null) {
         $headers[] = 'requesttoken: ' . $token;
     }
@@ -95,7 +101,11 @@ function request(string $path, ?array $payload = null, ?string $token = null): a
         if ($body === false) {
             throw new RuntimeException('HTTP request failed: ' . curl_error($curl));
         }
-        return ['status' => curl_getinfo($curl, CURLINFO_RESPONSE_CODE), 'body' => $body];
+        return [
+            'status' => curl_getinfo($curl, CURLINFO_RESPONSE_CODE),
+            'body' => $body,
+            'redirect' => parse_url((string) curl_getinfo($curl, CURLINFO_REDIRECT_URL), PHP_URL_PATH),
+        ];
     } finally {
         curl_close($curl);
     }
@@ -116,17 +126,24 @@ function login(string $userId, string $password): void {
         'password' => $password,
         'requesttoken' => tokenFrom($page['body']),
     ]);
-    check($response['status'] === 303 || $response['status'] === 302, 'Test account signs in over HTTP');
+    check(($response['status'] === 303 || $response['status'] === 302)
+        && !str_ends_with($response['redirect'] ?? '', '/login'),
+        'Test account signs in over HTTP');
 }
 
 try {
     $user = $userManager->createUser($userId, $password);
     check($user !== false, 'Temporary regular account was created');
     check(!$groupManager->isAdmin($userId), 'Test account is not an administrator');
+    $anonymous = request('/index.php/apps/timesheets/');
+    check(in_array($anonymous['status'], [302, 303], true)
+        && str_ends_with($anonymous['redirect'] ?? '', '/login'),
+        'Dashboard requires authentication');
     login($userId, $password);
     $dashboard = request('/index.php/apps/timesheets/');
     check($dashboard['status'] === 200 && str_contains($dashboard['body'], 'Timesheets dashboard'),
-        'Regular account can open the Timesheets dashboard');
+        'Regular account can open the Timesheets dashboard (HTTP ' . $dashboard['status']
+        . ', redirect ' . ($dashboard['redirect'] ?? 'none') . ')');
     check(preg_match('/id="initial-state-core-apps" value="([^"]+)"/', $dashboard['body'], $matches) === 1,
         'Dashboard includes app-menu state');
     $apps = json_decode(base64_decode(html_entity_decode($matches[1], ENT_QUOTES), true), true, 512, JSON_THROW_ON_ERROR);
@@ -145,7 +162,7 @@ try {
     check($groupManager->isAdmin($userId), 'Temporary account is promoted for admin-only checks');
     $admin = request('/index.php/settings/admin/timesheets');
     check($admin['status'] === 200 && str_contains($admin['body'], 'timesheets-admin-form'),
-        'Administrator can open Timesheets administration settings');
+        'Administrator can open Timesheets administration settings (HTTP ' . $admin['status'] . ')');
     check(str_contains($admin['body'], 'timesheets/js/admin.js'), 'Settings page loads the external save script');
     check(!str_contains($admin['body'], "const form = document.getElementById('timesheets-admin-form')"),
         'Settings page does not rely on a CSP-blocked inline script');
@@ -179,6 +196,7 @@ try {
     }
 } finally {
     if ($settingsSaved) {
+        Server::get(IAppConfig::class)->clearCache();
         foreach ($originalValues as $key => $value) {
             if ($value === null) {
                 $config->deleteAppValue('timesheets', $key);
@@ -195,4 +213,12 @@ try {
     }
 }
 
+Server::get(IAppConfig::class)->clearCache();
+foreach ($originalValues as $key => $value) {
+    check($value === null
+        ? !in_array($key, $config->getAppKeys('timesheets'), true)
+        : $config->getAppValue('timesheets', $key) === $value,
+        'Original setting restored: ' . $key);
+}
+check(!$userManager->userExists($userId), 'Temporary test account was deleted');
 echo "Entry point checks passed; temporary account and cookies removed, original settings restored.\n";

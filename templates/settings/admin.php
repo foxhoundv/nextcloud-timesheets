@@ -9,7 +9,7 @@ $settings = $_['settings'];
 <div id="timesheets-admin" class="section">
     <h2>Timesheets administration</h2>
 
-    <form id="timesheets-admin-form" method="post" action="<?php p(\OCP\Util::linkToRoute('timesheets.admin.save')); ?>">
+    <form id="timesheets-admin-form" method="post" action="<?php p($_['saveUrl']); ?>">
         <div class="timesheets-admin-row">
             <label>
                 <input type="checkbox" name="shift_tracking" value="1" <?php echo !empty($settings['shift_tracking']) ? 'checked' : ''; ?>>
