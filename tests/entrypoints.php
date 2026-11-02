@@ -73,6 +73,9 @@ if ($cookieFile === false) {
 chmod($cookieFile, 0600);
 $user = null;
 $settingsSaved = false;
+$previousAccess = $config->getAppValue('timesheets', 'access_policy', '');
+$accessSaved = false;
+$accessGroup = null;
 
 function request(string $path, ?array $payload = null, ?string $token = null): array {
     global $baseUrl, $cookieFile;
@@ -167,6 +170,17 @@ try {
         && str_ends_with($anonymous['redirect'] ?? '', '/login'),
         'Dashboard requires authentication');
     login($userId, $password);
+    $accessPage = request('/index.php/apps/files/');
+    $accessToken = tokenFrom($accessPage['body']);
+    $adminGroup->addUser($user);
+    try {
+        $accessSaved = true;
+        $response = request('/index.php/apps/timesheets/settings/access',
+            ['policy' => '{"restricted":false,"grants":[]}'], $accessToken);
+        check($response['status'] === 200, 'Access test starts in unrestricted mode');
+    } finally {
+        $adminGroup->removeUser($user);
+    }
     $dashboard = request('/index.php/apps/timesheets/');
     check($dashboard['status'] === 200 && str_contains($dashboard['body'], 'Timesheets dashboard'),
         'Regular account can open the Timesheets dashboard (HTTP ' . $dashboard['status']
@@ -294,7 +308,73 @@ try {
     foreach ($payload as $key => $value) {
         check(($storedValues[$key] ?? null) === $value, 'Saved setting persists: ' . $key);
     }
+    $accessPath = '/index.php/apps/timesheets/settings/access';
+    $searchPath = $accessPath . '/search?type=user&query=' . rawurlencode($userId);
+    $adminGroup->removeUser($user);
+    check(request($accessPath, ['policy' => '{"restricted":true,"grants":[]}'], $token)['status'] === 403,
+        'Regular users cannot change access policy');
+    check(request($searchPath, null, $token)['status'] === 403,
+        'Regular users cannot search the user directory');
+    $adminGroup->addUser($user);
+    check(request($accessPath, ['policy' => '{"restricted":true,"grants":[]}'])['status'] === 412,
+        'Access policy changes require CSRF protection');
+    check(request($accessPath, ['policy' => 'not-json'], $token)['status'] === 400,
+        'Malformed access policy is rejected');
+    check(request($searchPath, null, $token)['status'] === 200,
+        'Administrators can search for assignment targets');
+    $accessGroup = $groupManager->createGroup('timesheets-access-' . bin2hex(random_bytes(6)));
+    check($accessGroup !== false, 'Temporary access test group created');
+    $accessGroup->addUser($user);
+    $policy = ['restricted' => true, 'grants' => [
+        ['type' => 'group', 'id' => $accessGroup->getGID(), 'shift' => true, 'job' => false],
+        ['type' => 'user', 'id' => $userId, 'shift' => false, 'job' => true],
+    ]];
+    check(request($accessPath, ['policy' => json_encode($policy, JSON_THROW_ON_ERROR)], $token)['status'] === 200,
+        'Administrator can save user and group assignments');
+    $adminGroup->removeUser($user);
+    $permitted = request('/index.php/apps/timesheets/');
+    check($permitted['status'] === 200 && str_contains($permitted['body'], '>Clock in</button>'),
+        'Group assignment grants shift tracking to a regular user');
+    check(request($clockInPath, [], $token)['status'] === 200,
+        'Group-granted regular user can clock in');
+    $assignedShift = $shiftMapper->findOpenForUser($userId);
+    check($assignedShift !== null, 'Assigned shift is persisted');
+    $testShifts[] = $assignedShift;
+    $adminGroup->addUser($user);
+    check(request($accessPath, ['policy' => '{"restricted":true,"grants":[]}'], $token)['status'] === 200,
+        'Administrator can revoke all assignments without deleting time logs');
+    $adminGroup->removeUser($user);
+    $revoked = request('/index.php/apps/timesheets/');
+    check($revoked['status'] === 200 && str_contains($revoked['body'], '>Clock out</button>')
+        && str_contains($revoked['body'], '2026-10-01'), 'Revoked user retains history and active clock-out control');
+    check(request($clockInPath, [], $token)['status'] === 403,
+        'Revocation prevents new clock-ins through the API');
+    check(request($clockOutPath, ['shiftId' => $assignedShift->getId()], $token)['status'] === 200,
+        'Revoked user can finish the existing shift');
+    $revoked = request('/index.php/apps/timesheets/');
+    check($revoked['status'] === 200 && !str_contains($revoked['body'], '>Clock in</button>')
+        && str_contains($revoked['body'], 'do not have permission'), 'Revoked history remains read-only after clock-out');
+    $adminGroup->addUser($user);
+    $adminAccess = request('/index.php/settings/admin/timesheets');
+    check($adminAccess['status'] === 200 && str_contains($adminAccess['body'], 'Save access settings'),
+        'Nextcloud administrators retain settings access without an assignment');
 } finally {
+    if ($accessSaved && $user !== null && $user !== false) {
+        $adminGroup->addUser($user);
+        $restored = request('/index.php/apps/timesheets/settings/access', [
+            'policy' => $previousAccess === '' ? '{"restricted":false,"grants":[]}' : $previousAccess,
+        ], $accessToken);
+        if ($restored['status'] !== 200) {
+            throw new RuntimeException('Failed to restore original access policy through HTTP');
+        }
+        Server::get(IAppConfig::class)->clearCache();
+        if ($previousAccess === '') {
+            $config->deleteAppValue('timesheets', 'access_policy');
+        }
+    }
+    if ($accessGroup !== null && $accessGroup !== false && !$accessGroup->delete()) {
+        throw new RuntimeException('Failed to remove temporary access group');
+    }
     foreach ($testShifts as $shift) {
         $shiftMapper->delete($shift);
     }

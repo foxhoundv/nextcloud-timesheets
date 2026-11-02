@@ -33,13 +33,14 @@ $clock = new class implements ITimeFactory {
     }
 };
 $config = Server::get(IConfig::class);
+$previousAccess = $config->getAppValue('timesheets', 'access_policy', '');
 $previousTracking = in_array('shift_tracking', $config->getAppKeys('timesheets'), true)
     ? $config->getAppValue('timesheets', 'shift_tracking') : null;
 $testUserId = 'timesheets-clock-' . bin2hex(random_bytes(8));
 $user = Server::get(IUserManager::class)->createUser($testUserId, bin2hex(random_bytes(24)));
 check($user !== false, 'Clock test account created');
 $mapper = new ShiftMapper($db);
-$service = new ShiftClockService($mapper, $config, $clock);
+$service = new ShiftClockService($mapper, $config, $clock, Server::get(\OCA\Timesheets\Service\AccessService::class));
 $saved = [];
 
 function expectConflict(callable $action, int $code, string $message): void {
@@ -53,6 +54,7 @@ function expectConflict(callable $action, int $code, string $message): void {
 }
 
 try {
+    $config->setAppValue('timesheets', 'access_policy', '{"restricted":false,"grants":[]}');
     $config->setAppValue('timesheets', 'shift_tracking', '0');
     expectConflict(fn () => $service->clockIn($testUserId), 403, 'Disabled tracking rejects clock-in');
     $config->setAppValue('timesheets', 'shift_tracking', '1');
@@ -127,6 +129,11 @@ try {
         $mapper->delete($entry);
     }
     Server::get(IAppConfig::class)->clearCache();
+    if ($previousAccess === '') {
+        $config->deleteAppValue('timesheets', 'access_policy');
+    } else {
+        $config->setAppValue('timesheets', 'access_policy', $previousAccess);
+    }
     if ($previousTracking === null) {
         $config->deleteAppValue('timesheets', 'shift_tracking');
     } else {

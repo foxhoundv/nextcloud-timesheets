@@ -17,6 +17,7 @@ class ShiftClockService {
         private ShiftMapper $shiftMapper,
         private IConfig $config,
         private ITimeFactory $time,
+        private AccessService $access,
     ) {
     }
 
@@ -46,6 +47,9 @@ class ShiftClockService {
     public function clockIn(string $userId): Shift {
         if (!$this->isEnabled()) {
             throw new \DomainException('Shift tracking is disabled. Ask an administrator to enable it.', 403);
+        }
+        if (!$this->access->permissions($userId)['shift']) {
+            throw new \DomainException('You do not have permission to start shifts. Ask an administrator for access.', 403);
         }
         $zone = $this->userTimeZone($userId);
         $now = $this->now();

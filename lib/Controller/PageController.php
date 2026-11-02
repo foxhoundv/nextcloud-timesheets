@@ -6,6 +6,7 @@ namespace OCA\Timesheets\Controller;
 
 use OCA\Timesheets\Service\ShiftService;
 use OCA\Timesheets\Service\ShiftClockService;
+use OCA\Timesheets\Service\AccessService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -22,6 +23,7 @@ class PageController extends Controller {
         private IUserSession $userSession,
         private ShiftClockService $clock,
         private IURLGenerator $urlGenerator,
+        private AccessService $access,
     ) {
         parent::__construct($appName, $request);
     }
@@ -33,6 +35,12 @@ class PageController extends Controller {
         $userId = $user ? $user->getUID() : '';
 
         $shifts = $this->shiftService->listForUser($userId);
+        $permissions = $this->access->permissions($userId);
+        if (!$permissions['access'] && $shifts === []) {
+            $response = new TemplateResponse('timesheets', 'denied');
+            $response->setStatus(403);
+            return $response;
+        }
         $stats = $this->buildStats($shifts);
 
         $entries = $this->buildEntries($shifts, $userId);
@@ -41,6 +49,7 @@ class PageController extends Controller {
             'stats' => $stats,
             'entries' => $entries,
             'trackingEnabled' => $this->clock->isEnabled(),
+            'canStartShift' => $permissions['shift'],
             'activeShift' => $this->clock->current($userId),
             'clockInUrl' => $this->urlGenerator->linkToRoute('timesheets.shift.clockIn'),
             'clockOutUrl' => $this->urlGenerator->linkToRoute('timesheets.shift.clockOut'),

@@ -28,12 +28,14 @@ $entries = $_['entries'];
             <?php if (!$_['trackingEnabled']): ?>
                 <p><?php p($l->t('Shift tracking is now disabled, but you can still finish this open shift.')); ?></p>
             <?php endif; ?>
+        <?php elseif (!$_['canStartShift']): ?>
+            <p><?php p($l->t('You do not have permission to start shifts. You can still view your history. Ask an administrator for access.')); ?></p>
         <?php elseif ($_['trackingEnabled']): ?>
             <p><?php p($l->t('You are clocked out. Start a shift when you begin work.')); ?></p>
         <?php else: ?>
             <p><?php p($l->t('Shift tracking is disabled. Ask an administrator to enable it before starting a shift.')); ?></p>
         <?php endif; ?>
-        <?php if ($_['trackingEnabled'] || $_['activeShift'] !== null): ?>
+        <?php if (($_['trackingEnabled'] && $_['canStartShift']) || $_['activeShift'] !== null): ?>
             <form id="timesheets-clock-form" method="post" action="<?php p($_['activeShift'] === null ? $_['clockInUrl'] : $_['clockOutUrl']); ?>">
                 <?php if ($_['activeShift'] !== null): ?>
                     <input type="hidden" name="shiftId" value="<?php p((string) $_['activeShift']['id']); ?>">

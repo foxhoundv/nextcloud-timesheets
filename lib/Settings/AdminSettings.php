@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace OCA\Timesheets\Settings;
 
+use OCA\Timesheets\Service\AccessService;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
 use OCP\IURLGenerator;
@@ -13,6 +14,7 @@ class AdminSettings implements ISettings {
     public function __construct(
         private IConfig $config,
         private IURLGenerator $urlGenerator,
+        private AccessService $access,
     ) {
     }
 
@@ -28,6 +30,9 @@ class AdminSettings implements ISettings {
         return new TemplateResponse('timesheets', 'settings/admin', [
             'settings' => $settings,
             'saveUrl' => $this->urlGenerator->linkToRoute('timesheets.admin.save'),
+            'accessPolicy' => $this->access->policy(),
+            'accessSaveUrl' => $this->urlGenerator->linkToRoute('timesheets.access.save'),
+            'accessSearchUrl' => $this->urlGenerator->linkToRoute('timesheets.access.search'),
         ]);
     }
 

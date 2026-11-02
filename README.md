@@ -56,6 +56,20 @@ The dashboard shows your current shift, a live elapsed-time estimate, all-date r
 
 Both pages use paired Nextcloud background and text colors, with text labels rather than color alone for statuses. Settings controls align in two columns on wide screens and stack on narrow screens.
 
+### User and group access
+
+Version 0.1.9 adds **User and group access** in Timesheet Administration. Existing installations remain unrestricted by default: everyone with Nextcloud app access can use globally enabled tracking features. Nextcloud's own app-level restrictions still apply.
+
+Search for a user or group, select a result, and add an assignment. Choose **Shift tracking**, **Job tracking**, both, or neither (dashboard access only). Enable **Restrict access to assigned users and groups**, then select **Save access settings**. Assignments are saved separately from the global tracking preferences. They take effect only in restricted mode; disabling restricted mode restores existing access without deleting assignments.
+
+Permissions are additive across direct assignments and all current group memberships. A false checkbox does not deny a permission granted elsewhere. Global shift/job switches remain master switches; job permissions are saved for the future job workflow, not a functioning job timer today. Assignments do not grant administration rights; Nextcloud administrators always manage settings.
+
+Removing assignments or group membership prevents new clock-ins when no remaining grant allows them. Users retain access to their own saved history and can finish an already-open shift; users without an assignment or history receive an explicit access-required page. The menu entry may remain visible, but server-side permissions govern dashboard and API access. Disabling an account or revoking app access through Nextcloud itself can still prevent sign-in/app access, including clock-out.
+
+Access policy is stored in Nextcloud app configuration, not app files, and survives updates along with tracking preferences and time logs. Invalid assignment targets or malformed policies are rejected without replacing the saved configuration.
+
+On the testing server, run `php apps/timesheets/tests/access.php /path/to/nextcloud` for additive grants, group membership, read-only history, revocation, and invalid-input regression checks. It temporarily changes global access/shift preferences and restores them and deletes its fixtures afterwards; run only when testing users are idle. The entry-point suite also tests HTTP authorization, CSRF, directory-search restrictions, and clock-out after revocation.
+
 ### Clocking in and out
 
 1. An administrator enables **Enable shift tracking** and saves the settings.
@@ -122,7 +136,7 @@ The existing `.gitignore` rules exclude `.env` from Git. Keep real credentials o
 
 ## Development status
 
-This repository contains migration-managed shift persistence and clock-in/out with actual elapsed time. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Per-user/group access controls, breaks, rounding, confirmations, job tracking, storage integration, printable views, and workbook generation are planned next.
+This repository contains migration-managed shift persistence, clock-in/out with actual elapsed time, and opt-in user/group access and tracking grants. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Delegated administration, breaks, rounding, confirmations, job tracking, storage integration, printable views, and workbook generation are planned next.
 
 ## Longer-term direction
 

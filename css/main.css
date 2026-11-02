@@ -276,6 +276,45 @@
     font-weight: 600;
 }
 
+#timesheets-admin .timesheets-access-search {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin: 16px 0;
+}
+
+#timesheets-admin .timesheets-access-search input,
+#timesheets-admin .timesheets-access-search select {
+    min-width: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+#timesheets-admin .timesheets-access-table {
+    overflow-x: auto;
+    margin: 16px 0;
+}
+
+#timesheets-admin .timesheets-access-table table {
+    width: 100%;
+    color: inherit;
+}
+
+#timesheets-admin .timesheets-access-table th,
+#timesheets-admin .timesheets-access-table td {
+    text-align: start;
+    padding: 12px;
+    border-bottom: 1px solid var(--color-border-maxcontrast);
+    overflow-wrap: anywhere;
+}
+
+#timesheets-admin .timesheets-access-table input[type="checkbox"],
+#timesheets-admin #timesheets-restricted {
+    appearance: auto;
+    width: 22px;
+    height: 22px;
+}
+
 #timesheets a:focus-visible,
 #timesheets [tabindex]:focus-visible,
 #timesheets-admin input:focus-visible,

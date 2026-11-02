@@ -67,7 +67,8 @@ $config = Server::get(IConfig::class);
 $users = Server::get(IUserManager::class);
 $db = Server::get(IDBConnection::class);
 $mapper = new ShiftMapper($db);
-$clock = new ShiftClockService($mapper, $config, Server::get(ITimeFactory::class));
+$access = Server::get(\OCA\Timesheets\Service\AccessService::class);
+$clock = new ShiftClockService($mapper, $config, Server::get(ITimeFactory::class), $access);
 $preferences = [
     'shift_tracking' => '1',
     'job_tracking' => '1',
@@ -86,6 +87,7 @@ if ($phase === 'prepare') {
         'userId' => 'timesheets-upgrade-' . bin2hex(random_bytes(12)),
         'previous' => $previous,
         'version' => $config->getAppValue('timesheets', 'installed_version'),
+        'previousAccess' => $config->getAppValue('timesheets', 'access_policy', ''),
     ];
     $oldMask = umask(0077);
     try {
@@ -107,6 +109,7 @@ if ($phase === 'prepare') {
     foreach ($preferences as $key => $value) {
         $config->setAppValue('timesheets', $key, $value);
     }
+    $config->setAppValue('timesheets', 'access_policy', '{"restricted":false,"grants":[]}');
     $config->setUserValue($state['userId'], 'core', 'timezone', 'America/Los_Angeles');
     $history = new Shift();
     $history->setUserId($state['userId']);
@@ -151,6 +154,11 @@ if ($phase === 'cleanup') {
             $config->setAppValue('timesheets', $key, $value);
         }
     }
+    if (($state['previousAccess'] ?? '') === '') {
+        $config->deleteAppValue('timesheets', 'access_policy');
+    } else {
+        $config->setAppValue('timesheets', 'access_policy', $state['previousAccess']);
+    }
     foreach ($state['previous'] as $key => $value) {
         check($config->getAppValue('timesheets', $key, '__absent__') === ($value ?? '__absent__'),
             'Original administration preference restored: ' . $key);
@@ -166,7 +174,7 @@ check(version_compare($config->getAppValue('timesheets', 'installed_version'), $
 foreach ($preferences as $key => $value) {
     check($config->getAppValue('timesheets', $key) === $value, 'Non-default setting survives upgrade: ' . $key);
 }
-$settings = new AdminSettings($config, Server::get(IURLGenerator::class));
+$settings = new AdminSettings($config, Server::get(IURLGenerator::class), $access);
 check($settings->getForm()->getParams()['settings'] === [
     'shift_tracking' => true,
     'job_tracking' => true,
@@ -188,7 +196,7 @@ check($user !== null, 'Account survives upgrade');
 $session = Server::get(IUserSession::class);
 $session->setUser($user);
 $page = new PageController('timesheets', Server::get(IRequest::class), new ShiftService($mapper),
-    $session, $clock, Server::get(IURLGenerator::class));
+    $session, $clock, Server::get(IURLGenerator::class), $access);
 $params = $page->index()->getParams();
 check($params['activeShift']['id'] === $active['id'] && $params['trackingEnabled'],
     'Dashboard still receives the active clock-out control and elapsed time');
