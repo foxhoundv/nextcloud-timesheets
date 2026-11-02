@@ -270,6 +270,12 @@ try {
     check($admin['status'] === 200 && str_contains($admin['body'], 'timesheets-admin-form'),
         'Administrator can open Timesheets administration settings (HTTP ' . $admin['status'] . ')');
     check(str_contains($admin['body'], 'timesheets/js/admin.js'), 'Settings page loads the external save script');
+    check(str_contains($admin['body'], 'role="tablist"') && str_contains($admin['body'], 'timesheets-tab-group')
+        && str_contains($admin['body'], 'timesheets-tab-user') && str_contains($admin['body'], 'Groups/Users With Access'),
+        'Administration renders group/user tabs and the selected access area');
+    check(str_contains($admin['body'], 'value="' . $userId . '"')
+        && !str_contains($admin['body'], 'timesheets-principal-query'),
+        'Administration auto-populates account choices without a search request');
     check(str_contains($admin['body'], 'Users take unpaid breaks by clocking out and starting a new shift')
         && str_contains($admin['body'], 'There is no separate break switch or automatic deduction.'),
         'Administration explains unpaid breaks without an additional enable switch');

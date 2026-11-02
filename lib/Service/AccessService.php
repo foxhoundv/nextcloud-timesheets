@@ -64,6 +64,31 @@ class AccessService {
         return $permissions;
     }
 
+    public function directory(string $type): array {
+        if (!in_array($type, ['user', 'group'], true)) {
+            throw new \DomainException('Choose users or groups.', 400);
+        }
+        $entries = [];
+        $offset = 0;
+        do {
+            $matches = $type === 'user'
+                ? $this->users->search('', 200, $offset)
+                : $this->groups->search('', 200, $offset);
+            foreach ($matches as $match) {
+                $id = $type === 'user' ? $match->getUID() : $match->getGID();
+                $entries[$id] = [
+                    'id' => $id,
+                    'name' => $type === 'user' ? $id : $match->getDisplayName(),
+                ];
+            }
+            $offset += count($matches);
+        } while (count($matches) === 200);
+        $entries = array_values($entries);
+        usort($entries, static fn (array $a, array $b): int =>
+            strcasecmp($a['name'], $b['name']) ?: strcmp($a['id'], $b['id']));
+        return $entries;
+    }
+
     public function search(string $type, string $query): array {
         if (!in_array($type, ['user', 'group'], true)) {
             throw new \DomainException('Choose users or groups.', 400);

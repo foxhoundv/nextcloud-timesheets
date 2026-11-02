@@ -32,7 +32,10 @@ class AdminSettings implements ISettings {
             'saveUrl' => $this->urlGenerator->linkToRoute('timesheets.admin.save'),
             'accessPolicy' => $this->access->policy(),
             'accessSaveUrl' => $this->urlGenerator->linkToRoute('timesheets.access.save'),
-            'accessSearchUrl' => $this->urlGenerator->linkToRoute('timesheets.access.search'),
+            'accessDirectory' => [
+                'group' => $this->access->directory('group'),
+                'user' => $this->access->directory('user'),
+            ],
         ]);
     }
 

@@ -276,39 +276,70 @@
     font-weight: 600;
 }
 
-#timesheets-admin .timesheets-access-search {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 8px;
+#timesheets-admin .timesheets-access-picker {
+    border: 1px solid var(--color-border-maxcontrast);
+    border-radius: 8px;
+    padding: 12px;
     margin: 16px 0;
 }
 
-#timesheets-admin .timesheets-access-search input,
-#timesheets-admin .timesheets-access-search select {
+#timesheets-admin .timesheets-access-picker [role="tablist"] {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+}
+
+#timesheets-admin .timesheets-access-picker [aria-selected="true"] {
+    border: 2px solid var(--color-main-text);
+    font-weight: 700;
+}
+
+#timesheets-admin .timesheets-access-picker select {
     min-width: 0;
     width: 100%;
     box-sizing: border-box;
+    height: 240px;
+    margin-bottom: 12px;
+    color: var(--color-main-text);
+    background: var(--color-main-background);
 }
 
-#timesheets-admin .timesheets-access-table {
-    overflow-x: auto;
+#timesheets-admin #timesheets-access-grants {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 0;
     margin: 16px 0;
+    list-style: none;
 }
 
-#timesheets-admin .timesheets-access-table table {
-    width: 100%;
-    color: inherit;
-}
-
-#timesheets-admin .timesheets-access-table th,
-#timesheets-admin .timesheets-access-table td {
-    text-align: start;
-    padding: 12px;
-    border-bottom: 1px solid var(--color-border-maxcontrast);
+#timesheets-admin .timesheets-access-chip {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border-maxcontrast);
+    border-radius: 20px;
+    background: var(--color-background-hover);
+    max-width: 100%;
     overflow-wrap: anywhere;
 }
 
-#timesheets-admin .timesheets-access-table input[type="checkbox"],
+#timesheets-admin .timesheets-access-chip label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+#timesheets-admin .timesheets-access-chip button {
+    min-width: 32px;
+    min-height: 32px;
+    margin: 0;
+    border-radius: 50%;
+}
+
+#timesheets-admin .timesheets-access-chip input[type="checkbox"],
 #timesheets-admin #timesheets-restricted {
     appearance: auto;
     width: 22px;

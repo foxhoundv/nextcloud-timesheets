@@ -129,6 +129,25 @@ try {
         'User directory search returns stable IDs');
     check(in_array($group->getGID(), array_column($access->search('group', $id), 'id'), true),
         'Group directory search returns stable IDs');
+    $user->setDisplayName('ZZZ display name differs from account name');
+    $directory = $access->directory('user');
+    $entry = array_values(array_filter($directory, static fn (array $entry): bool => $entry['id'] === $id));
+    check(count($entry) === 1 && $entry[0]['name'] === $id,
+        'User selector displays account names instead of display names');
+    foreach (['user', 'group'] as $type) {
+        $directory = $access->directory($type);
+        $sorted = $directory;
+        usort($sorted, static fn (array $a, array $b): int =>
+            strcasecmp($a['name'], $b['name']) ?: strcmp($a['id'], $b['id']));
+        check($directory === $sorted, 'Complete selector directory is alphabetized: ' . $type);
+        check(count($directory) === count(array_unique(array_column($directory, 'id'))),
+            'Directory contains no duplicate IDs: ' . $type);
+    }
+    $group->setDisplayName('A renamed group');
+    $directory = $access->directory('group');
+    $entry = array_values(array_filter($directory, static fn (array $entry): bool => $entry['id'] === $group->getGID()));
+    check(count($entry) === 1 && $entry[0]['name'] === 'A renamed group',
+        'Group selector refreshes renamed group names without changing stable IDs');
 } finally {
     foreach ($mapper->findByUser($id) as $shift) {
         $mapper->delete($shift);

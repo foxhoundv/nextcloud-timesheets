@@ -7,6 +7,16 @@ script('timesheets', 'access');
 style('timesheets', 'main');
 
 $settings = $_['settings'];
+$assigned = ['group' => [], 'user' => []];
+$names = ['group' => [], 'user' => []];
+foreach ($_['accessPolicy']['grants'] as $grant) {
+    $assigned[$grant['type']][$grant['id']] = true;
+}
+foreach ($_['accessDirectory'] as $type => $entries) {
+    foreach ($entries as $entry) {
+        $names[$type][$entry['id']] = $entry['name'];
+    }
+}
 ?>
 <div id="timesheets-admin" class="section">
     <h2><?php p($l->t('Timesheet Administration')); ?></h2>
@@ -83,7 +93,7 @@ $settings = $_['settings'];
     <p class="timesheets-intro"><?php p($l->t('By default, everyone with Nextcloud app access can use enabled tracking features. Restricted mode limits new activity to assigned users and groups. It does not override Nextcloud app-level restrictions.')); ?></p>
     <p class="timesheets-intro"><?php p($l->t('Assignments combine: a user receives each permission granted directly or by any group. An assignment without tracking permissions grants dashboard access only. Global tracking switches above still apply. Job permissions are saved for future job tracking; job recording is not available yet.')); ?></p>
     <p class="timesheets-intro"><?php p($l->t('After access is removed, users can still view their own saved history and finish an open shift, but cannot start new shifts. Nextcloud administrators always manage these settings; assignments do not grant administration rights.')); ?></p>
-    <form id="timesheets-access-form" method="post" action="<?php p($_['accessSaveUrl']); ?>" data-search-url="<?php p($_['accessSearchUrl']); ?>">
+    <form id="timesheets-access-form" method="post" action="<?php p($_['accessSaveUrl']); ?>">
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">
                 <label for="timesheets-restricted"><?php p($l->t('Restrict access to assigned users and groups')); ?></label>
@@ -92,44 +102,44 @@ $settings = $_['settings'];
             <input id="timesheets-restricted" type="checkbox" aria-describedby="timesheets-restricted-help" <?php echo $_['accessPolicy']['restricted'] ? 'checked' : ''; ?>>
         </div>
         <fieldset>
-            <legend><?php p($l->t('Find a user or group')); ?></legend>
-            <div class="timesheets-access-search">
-                <label for="timesheets-principal-type"><?php p($l->t('Assignment type')); ?></label>
-                <select id="timesheets-principal-type">
-                    <option value="user"><?php p($l->t('User')); ?></option>
-                    <option value="group"><?php p($l->t('Group')); ?></option>
-                </select>
-                <label for="timesheets-principal-query"><?php p($l->t('Name or ID')); ?></label>
-                <input id="timesheets-principal-query" type="text" minlength="2" maxlength="255" aria-describedby="timesheets-search-help">
-                <button type="button" id="timesheets-access-search"><?php p($l->t('Search')); ?></button>
-                <p id="timesheets-search-help"><?php p($l->t('Enter at least 2 characters. Up to 20 results are shown; narrow your search if needed.')); ?></p>
-                <label for="timesheets-principal-results"><?php p($l->t('Search results')); ?></label>
-                <select id="timesheets-principal-results"></select>
-                <button type="button" id="timesheets-access-add"><?php p($l->t('Add assignment')); ?></button>
-            </div>
-            <p id="timesheets-search-status" role="status" aria-live="polite"></p>
-        </fieldset>
-        <div class="timesheets-access-table">
-            <table>
-                <caption><?php p($l->t('Assignments (applied only in restricted mode)')); ?></caption>
-                <thead><tr>
-                    <th scope="col"><?php p($l->t('Type and ID')); ?></th>
-                    <th scope="col"><?php p($l->t('Shift tracking')); ?></th>
-                    <th scope="col"><?php p($l->t('Job tracking (planned)')); ?></th>
-                    <th scope="col"><?php p($l->t('Actions')); ?></th>
-                </tr></thead>
-                <tbody id="timesheets-access-grants">
-                <?php foreach ($_['accessPolicy']['grants'] as $grant): ?>
-                    <tr data-type="<?php p($grant['type']); ?>" data-id="<?php p($grant['id']); ?>">
-                        <th scope="row"><?php p($l->t($grant['type'] === 'user' ? 'User' : 'Group') . ': ' . $grant['id']); ?></th>
-                        <td><input type="checkbox" data-permission="shift" aria-label="<?php p($l->t('Shift tracking for %s', [$grant['id']])); ?>" <?php echo $grant['shift'] ? 'checked' : ''; ?>></td>
-                        <td><input type="checkbox" data-permission="job" aria-label="<?php p($l->t('Job tracking for %s', [$grant['id']])); ?>" <?php echo $grant['job'] ? 'checked' : ''; ?>></td>
-                        <td><button type="button" data-remove aria-label="<?php p($l->t('Remove assignment for %s', [$grant['id']])); ?>"><?php p($l->t('Remove')); ?></button></td>
-                    </tr>
+            <legend><?php p($l->t('Select groups or users')); ?></legend>
+            <p id="timesheets-selection-help"><?php p($l->t('Lists refresh when this page loads. Users are sorted by account name, not display name; groups by group name. Only unassigned entries are shown. Select an entry, then choose Add.')); ?></p>
+            <div class="timesheets-access-picker">
+                <div role="tablist" aria-label="<?php p($l->t('Groups and users')); ?>">
+                <?php foreach (['group' => 'Groups', 'user' => 'Users'] as $type => $label): ?>
+                    <button type="button" role="tab" id="timesheets-tab-<?php p($type); ?>" aria-controls="timesheets-panel-<?php p($type); ?>" aria-selected="<?php p($type === 'group' ? 'true' : 'false'); ?>" tabindex="<?php p($type === 'group' ? '0' : '-1'); ?>" data-type="<?php p($type); ?>"><?php p($l->t($label)); ?></button>
                 <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
+                </div>
+                <?php foreach (['group' => 'Groups', 'user' => 'Users'] as $type => $label): ?>
+                    <div role="tabpanel" id="timesheets-panel-<?php p($type); ?>" aria-labelledby="timesheets-tab-<?php p($type); ?>" <?php echo $type === 'user' ? 'hidden' : ''; ?>>
+                        <select size="8" data-directory="<?php p($type); ?>" aria-label="<?php p($l->t($label)); ?>" aria-describedby="timesheets-selection-help">
+                        <?php foreach ($_['accessDirectory'][$type] as $entry): ?>
+                            <option value="<?php p($entry['id']); ?>" data-name="<?php p($entry['name']); ?>" <?php echo isset($assigned[$type][$entry['id']]) ? 'hidden disabled' : ''; ?>><?php p($entry['name']); ?></option>
+                        <?php endforeach; ?>
+                        </select>
+                        <p data-empty="<?php p($type); ?>" hidden><?php p($l->t('No unassigned entries available.')); ?></p>
+                    </div>
+                <?php endforeach; ?>
+                <button type="button" id="timesheets-access-add"><?php p($l->t('Add')); ?></button>
+            </div>
+            <p id="timesheets-selection-status" role="status" aria-live="polite"></p>
+        </fieldset>
+        <h3 id="timesheets-access-heading"><?php p($l->t('Groups/Users With Access')); ?></h3>
+        <p><?php p($l->t('Assignments apply only in restricted mode. Use the x button to remove an entry and return it to the selection list.')); ?></p>
+        <ul id="timesheets-access-grants" aria-labelledby="timesheets-access-heading">
+                <?php foreach ($_['accessPolicy']['grants'] as $grant): ?>
+                    <?php
+                    $name = $names[$grant['type']][$grant['id']] ?? $grant['id'];
+                    ?>
+                    <li class="timesheets-access-chip" data-type="<?php p($grant['type']); ?>" data-id="<?php p($grant['id']); ?>">
+                        <button type="button" data-remove aria-label="<?php p($l->t('Remove assignment for %s', [$name])); ?>"><span aria-hidden="true">&times;</span></button>
+                        <span><?php p($l->t($grant['type'] === 'user' ? 'User' : 'Group') . ': ' . $name); ?></span>
+                        <label><input type="checkbox" data-permission="shift" <?php echo $grant['shift'] ? 'checked' : ''; ?>><?php p($l->t('Shift tracking')); ?></label>
+                        <label><input type="checkbox" data-permission="job" <?php echo $grant['job'] ? 'checked' : ''; ?>><?php p($l->t('Job tracking (planned)')); ?></label>
+                    </li>
+                <?php endforeach; ?>
+        </ul>
+        <p id="timesheets-grants-empty" <?php echo $_['accessPolicy']['grants'] !== [] ? 'hidden' : ''; ?>><?php p($l->t('No groups or users assigned.')); ?></p>
         <p class="timesheets-intro"><?php p($l->t('Adding, removing, or changing assignments takes effect only after you save access settings. An empty list in restricted mode prevents all new tracking activity.')); ?></p>
         <div class="timesheets-admin-actions">
             <button type="submit" class="primary"><?php p($l->t('Save access settings')); ?></button>
