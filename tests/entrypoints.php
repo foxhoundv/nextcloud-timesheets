@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 use OCA\Timesheets\Settings\AdminSection;
 use OCA\Timesheets\Settings\AdminSettings;
+use OCA\Timesheets\Db\Shift;
+use OCA\Timesheets\Db\ShiftMapper;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IDBConnection;
@@ -131,6 +133,14 @@ function login(string $userId, string $password): void {
         'Test account signs in over HTTP');
 }
 
+function pageDocument(string $body): DOMDocument {
+    $document = new DOMDocument();
+    $document->loadHTML('<?xml encoding="UTF-8">' . $body, LIBXML_NOERROR | LIBXML_NOWARNING);
+    return $document;
+}
+
+$shiftMapper = new ShiftMapper(Server::get(IDBConnection::class));
+$testShifts = [];
 try {
     $user = $userManager->createUser($userId, $password);
     check($user !== false, 'Temporary regular account was created');
@@ -144,6 +154,36 @@ try {
     check($dashboard['status'] === 200 && str_contains($dashboard['body'], 'Timesheets dashboard'),
         'Regular account can open the Timesheets dashboard (HTTP ' . $dashboard['status']
         . ', redirect ' . ($dashboard['redirect'] ?? 'none') . ')');
+    check(str_contains($dashboard['body'], 'No shifts recorded yet')
+        && !str_contains($dashboard['body'], 'Waiting for clock-ins'),
+        'Empty dashboard explains the absence of records without a sample shift');
+    check(str_contains($dashboard['body'], 'Time recording is coming soon')
+        && !str_contains($dashboard['body'], 'Quick summary'),
+        'Dashboard explains recording availability instead of showing placeholder settings');
+    foreach ([
+        ['2026-10-01', '2026-10-01 08:00:00', 'closed', 125],
+        ['2026-10-02', '2026-10-02 08:00:00', 'open', 60],
+    ] as [$date, $clockIn, $status, $duration]) {
+        $shift = new Shift();
+        $shift->setUserId($userId);
+        $shift->setShiftDate($date);
+        $shift->setClockIn($clockIn);
+        $shift->setStatus($status);
+        $shift->setDurationMinutes($duration);
+        $testShifts[] = $shiftMapper->insert($shift);
+    }
+    $history = request('/index.php/apps/timesheets/');
+    check($history['status'] === 200, 'Populated dashboard is accessible');
+    $historyDocument = pageDocument($history['body']);
+    $historyPath = new DOMXPath($historyDocument);
+    $values = $historyPath->query('//*[@id="timesheets"]//*[contains(concat(" ", normalize-space(@class), " "), " timesheets-stat-value ")]');
+    check($values->length === 3 && trim($values->item(0)->textContent) === '2h 05m'
+        && trim($values->item(1)->textContent) === '1' && trim($values->item(2)->textContent) === '1',
+        'Overview shows all-date completed time and completed/open counts without including open durations');
+    check($historyPath->query('//*[@id="timesheets-history"]//tbody/tr')->length === 2,
+        'History shows one row per saved shift');
+    check(str_contains($history['body'], 'Not finalized') && !str_contains($history['body'], '2.05h'),
+        'Open durations are not finalized and closed durations use hours and minutes');
     check(preg_match('/id="initial-state-core-apps" value="([^"]+)"/', $dashboard['body'], $matches) === 1,
         'Dashboard includes app-menu state');
     $apps = json_decode(base64_decode(html_entity_decode($matches[1], ENT_QUOTES), true), true, 512, JSON_THROW_ON_ERROR);
@@ -166,6 +206,19 @@ try {
     check(str_contains($admin['body'], 'timesheets/js/admin.js'), 'Settings page loads the external save script');
     check(!str_contains($admin['body'], "const form = document.getElementById('timesheets-admin-form')"),
         'Settings page does not rely on a CSP-blocked inline script');
+    $adminDocument = pageDocument($admin['body']);
+    $adminPath = new DOMXPath($adminDocument);
+    check(trim($adminPath->query('//*[@id="timesheets-admin"]/h2')->item(0)->textContent) === 'Timesheet Administration',
+        'Administration page has the requested title');
+    check($adminPath->query('//*[@id="timesheets-admin-form"]/fieldset')->length === 3,
+        'Settings are grouped into tracking, rounding, and shift review');
+    foreach ($keys as $key) {
+        $control = $adminDocument->getElementById($key);
+        $help = $control === null ? null : $adminDocument->getElementById($control->getAttribute('aria-describedby'));
+        check($help !== null && trim($help->textContent) !== ''
+            && $adminPath->query('//label[@for="' . $key . '"]')->length === 1,
+            'Setting has an associated label and description: ' . $key);
+    }
     $token = tokenFrom($admin['body']);
     $payload = [
         'shift_tracking' => '1',
@@ -195,6 +248,9 @@ try {
         check(($storedValues[$key] ?? null) === $value, 'Saved setting persists: ' . $key);
     }
 } finally {
+    foreach ($testShifts as $shift) {
+        $shiftMapper->delete($shift);
+    }
     if ($settingsSaved) {
         Server::get(IAppConfig::class)->clearCache();
         foreach ($originalValues as $key => $value) {

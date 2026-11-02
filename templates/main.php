@@ -8,63 +8,69 @@ style('timesheets', 'main');
 $stats = $_['stats'];
 $entries = $_['entries'];
 ?>
-<div id="timesheets" class="section">
-    <div class="timesheets-header">
+<div id="app-content">
+<main id="timesheets" aria-labelledby="timesheets-title">
+    <header class="timesheets-header">
         <div>
-            <h1><?php p($l->t('Timesheets dashboard')); ?></h1>
-            <p><?php p($l->t('Track shifts, job time, and shop time in one place.')); ?></p>
+            <h1 id="timesheets-title"><?php p($l->t('Timesheets dashboard')); ?></h1>
+            <p><?php p($l->t('Your work time at a glance. Review your saved shifts and see what is still open.')); ?></p>
         </div>
-        <button type="button" class="primary">
-            <?php p($l->t('Clock in')); ?>
-        </button>
-    </div>
+        <a class="timesheets-text-link" href="#timesheets-history"><?php p($l->t('View shift history')); ?></a>
+    </header>
 
-    <div class="timesheets-stats">
+    <section class="timesheets-notice" aria-labelledby="timesheets-availability">
+        <h2 id="timesheets-availability"><?php p($l->t('Time recording is coming soon')); ?></h2>
+        <p><?php p($l->t('You can review saved shifts here. Clock-in/out and job tracking are not available yet; no live timer is running on this page.')); ?></p>
+    </section>
+
+    <section aria-labelledby="timesheets-overview">
+        <h2 id="timesheets-overview"><?php p($l->t('Your overview')); ?></h2>
+        <div class="timesheets-stats">
         <?php foreach ($stats as $stat): ?>
             <div class="timesheets-stat-card">
-                <div class="timesheets-stat-label"><?php p($stat['label']); ?></div>
+                <h3 class="timesheets-stat-label"><?php p($l->t($stat['label'])); ?></h3>
                 <div class="timesheets-stat-value"><?php p($stat['value']); ?></div>
+                <p><?php p($l->t($stat['description'])); ?></p>
             </div>
         <?php endforeach; ?>
-    </div>
+        </div>
+    </section>
 
-    <div class="timesheets-panels">
-        <div class="timesheets-panel">
-            <h2><?php p($l->t('Recent entries')); ?></h2>
+    <section id="timesheets-history" class="timesheets-panel" aria-labelledby="timesheets-history-title" tabindex="-1">
+        <h2 id="timesheets-history-title"><?php p($l->t('Shift history')); ?></h2>
+        <p class="timesheets-intro"><?php p($l->t('Your saved shifts, newest first. Durations are shown in hours and minutes, not decimal hours.')); ?></p>
+        <?php if ($entries === []): ?>
+            <div class="timesheets-empty">
+                <h3><?php p($l->t('No shifts recorded yet')); ?></h3>
+                <p><?php p($l->t('There is no saved time to display. Your recorded shifts will appear here when time recording is available.')); ?></p>
+            </div>
+        <?php else: ?>
+            <div class="timesheets-table-wrap" role="region" aria-label="<?php p($l->t('Shift history table')); ?>" tabindex="0">
             <table>
+                <caption><?php p($l->t('Saved shift dates, durations, and current status')); ?></caption>
                 <thead>
                     <tr>
-                        <th><?php p($l->t('Date')); ?></th>
-                        <th><?php p($l->t('Shift')); ?></th>
-                        <th><?php p($l->t('Total')); ?></th>
-                        <th><?php p($l->t('Status')); ?></th>
+                        <th scope="col"><?php p($l->t('Shift date')); ?></th>
+                        <th scope="col"><?php p($l->t('Recorded duration')); ?></th>
+                        <th scope="col"><?php p($l->t('Status')); ?></th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($entries as $entry): ?>
                         <tr>
                             <td><?php p($entry['date']); ?></td>
-                            <td><?php p($entry['shift']); ?></td>
-                            <td><?php p($entry['total']); ?></td>
+                            <td class="timesheets-duration"><?php p($entry['total'] ?? $l->t('Not finalized')); ?></td>
                             <td>
-                                <span class="timesheets-status <?php echo $entry['status'] === 'In progress' ? 'open' : 'closed'; ?>">
-                                    <?php p($entry['status']); ?>
+                                <span class="timesheets-status <?php echo $entry['isOpen'] ? 'open' : 'closed'; ?>">
+                                    <?php p($l->t($entry['status'])); ?>
                                 </span>
                             </td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
             </table>
-        </div>
-
-        <div class="timesheets-panel">
-            <h2><?php p($l->t('Quick summary')); ?></h2>
-            <ul class="timesheets-summary-list">
-                <li><?php p($l->t('Shift tracking enabled')); ?></li>
-                <li><?php p($l->t('Job tracking enabled')); ?></li>
-                <li><?php p($l->t('Rounding set to 15 minutes')); ?></li>
-                <li><?php p($l->t('Next review: weekly closeout')); ?></li>
-            </ul>
-        </div>
-    </div>
+            </div>
+        <?php endif; ?>
+    </section>
+</main>
 </div>

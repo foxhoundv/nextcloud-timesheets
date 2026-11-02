@@ -33,12 +33,6 @@ class PageController extends Controller {
 
         $entries = $this->buildEntries($shifts);
 
-        if ($entries === []) {
-            $entries = [
-                ['date' => 'No shifts yet', 'shift' => 'Waiting for clock-ins', 'total' => '0.0h', 'status' => 'Open'],
-            ];
-        }
-
         return new TemplateResponse('timesheets', 'main', [
             'stats' => $stats,
             'entries' => $entries,
@@ -46,9 +40,8 @@ class PageController extends Controller {
     }
 
     private function buildStats(array $shifts): array {
-        $weekMinutes = 0;
-        $jobMinutes = 0;
-        $shopMinutes = 0;
+        $recordedMinutes = 0;
+        $completedShiftCount = 0;
         $openShiftCount = 0;
 
         foreach ($shifts as $shift) {
@@ -57,17 +50,16 @@ class PageController extends Controller {
 
             if ($status === 'open') {
                 $openShiftCount++;
+            } else {
+                $completedShiftCount++;
+                $recordedMinutes += $duration;
             }
-
-            $weekMinutes += $duration;
-            $shopMinutes += $duration;
         }
 
         return [
-            ['label' => 'This week', 'value' => $this->formatMinutes($weekMinutes)],
-            ['label' => 'Job time', 'value' => $this->formatMinutes($jobMinutes)],
-            ['label' => 'Shop time', 'value' => $this->formatMinutes($shopMinutes)],
-            ['label' => 'Open shifts', 'value' => (string) $openShiftCount],
+            ['label' => 'Recorded time', 'value' => $this->formatMinutes($recordedMinutes), 'description' => 'Total saved duration of completed shifts, across all dates.'],
+            ['label' => 'Completed shifts', 'value' => (string) $completedShiftCount, 'description' => 'Shifts that have been closed.'],
+            ['label' => 'Open shifts', 'value' => (string) $openShiftCount, 'description' => 'Shifts that have not been closed.'],
         ];
     }
 
@@ -80,9 +72,9 @@ class PageController extends Controller {
 
             $entries[] = [
                 'date' => (string) ($shift->getShiftDate() ?? '—'),
-                'shift' => 'Shift ' . $status,
-                'total' => $this->formatMinutes($durationMinutes),
+                'total' => $status === 'open' ? null : $this->formatMinutes($durationMinutes),
                 'status' => $status === 'open' ? 'In progress' : 'Closed',
+                'isOpen' => $status === 'open',
             ];
         }
 
@@ -93,6 +85,6 @@ class PageController extends Controller {
         $hours = intdiv($minutes, 60);
         $mins = $minutes % 60;
 
-        return sprintf('%d.%02dh', $hours, $mins);
+        return sprintf('%dh %02dm', $hours, $mins);
     }
 }

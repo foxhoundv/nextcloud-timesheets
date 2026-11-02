@@ -33,11 +33,9 @@
                 }
 
                 status.textContent = t('timesheets', 'Settings saved successfully.');
-                status.style.color = 'var(--color-success)';
             } catch (error) {
                 console.error('Timesheets settings could not be saved.', error);
                 status.textContent = t('timesheets', 'Unable to save settings. Please try again.');
-                status.style.color = 'var(--color-error)';
             } finally {
                 button.disabled = false;
             }

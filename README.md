@@ -48,6 +48,12 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 
 To check both entry points over HTTP, run `php apps/timesheets/tests/entrypoints.php /path/to/nextcloud https://testing-instance` on the testing server as its web-server user. Adjust the app path for `custom_apps`. This test creates a temporary account, checks regular-user access, briefly promotes it for admin-only checks, tests saving and CSRF protection, restores the original settings, and deletes the account and cookies. Use only the testing instance; its HTTPS certificate must be trusted by PHP/cURL.
 
+The **Timesheet Administration** form groups tracking, rounding, and shift-review preferences with descriptions for every control. These preferences are saved, but their recording workflows are still in development.
+
+The dashboard shows all-date recorded duration for completed shifts, completed/open shift counts, and shift history. Durations use hours and minutes (for example, `2h 05m`), not decimal hours. Open shifts have no finalized duration. Empty history is shown as an empty state, not a sample shift. Clock-in/out is not yet available; the page explains this instead of displaying an inactive action or placeholder job/shop totals.
+
+Both pages use paired Nextcloud background and text colors, with text labels rather than color alone for statuses. Settings controls align in two columns on wide screens and stack on narrow screens.
+
 ### Database migrations and persistence checks
 
 Shift tables are created by Nextcloud migrations during installation or upgrade, never during page requests. Version 0.1.3 introduces the initial migration and leaves an existing, correctly prefixed shift table unchanged. Nextcloud applies its configured database table prefix automatically.
