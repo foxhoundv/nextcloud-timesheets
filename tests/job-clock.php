@@ -83,6 +83,16 @@ try {
         'Job-only mode trims reference and saves local start date');
     check($job->getClockIn() === '2026-11-02 07:55:00' && $job->getTimeZone() === 'America/Los_Angeles',
         'Job stores UTC timestamp and original timezone');
+    $session = Server::get(\OCP\IUserSession::class);
+    $session->setUser($user);
+    $page = new \OCA\Timesheets\Controller\PageController('timesheets', Server::get(\OCP\IRequest::class),
+        new \OCA\Timesheets\Service\ShiftService($shifts), $session, $shiftClock,
+        Server::get(\OCP\IURLGenerator::class), $access, $jobClock, $jobs);
+    $access->save('{"restricted":true,"grants":[]}');
+    $params = $page->index()->getParams();
+    check($params['entries'] === [] && $params['activeJob']['id'] === $job->getId() && !$params['canStartJob'],
+        'Revoked job-only user retains dashboard history and active job without any shifts');
+    $config->setAppValue('timesheets', 'access_policy', '{"restricted":false,"grants":[]}');
     rejects(fn () => $jobClock->clockIn($id, 'SO-2'), 409, 'One active job per user');
     rejects(fn () => $jobClock->clockOut($id, 0), 400, 'Job clock-out requires a valid ID');
     rejects(fn () => $jobClock->clockOut($id . '-other', $job->getId()), 409, 'Cross-user job clock-out is rejected');
@@ -101,6 +111,9 @@ try {
     $closed = $jobs->findByUser($id)[0];
     check($closed->getDurationSeconds() === 659 && $closed->getJobDate() === '2026-11-01'
         && $closed->getOpenUserId() === null, 'Job can finish after disabling; exact cross-midnight duration retained');
+    check($page->index()->getParams()['jobEntries'][0]['total'] === '0h 10m'
+        && str_contains($page->index()->getParams()['jobEntries'][0]['clockIn'], '2026-11-02 16:55:00 JST'),
+        'Completed job history uses current timezone and whole minutes');
     rejects(fn () => $jobClock->clockOut($id, $job->getId()), 409, 'Repeated job clock-out is rejected');
     $config->setAppValue('timesheets', 'job_tracking', '1');
     $config->setAppValue('timesheets', 'shift_tracking', '1');

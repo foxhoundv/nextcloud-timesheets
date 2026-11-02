@@ -98,7 +98,7 @@ There is no paused shift, break timer, automatic deduction, or separate break pe
 
 ### Job clock-in/out and combined tracking
 
-Version 0.1.12 adds independent job intervals. Enable **Enable job tracking** and grant job permission (when restricted mode is on). On the dashboard, enter a Sales Order/job reference and select **Start job**; select **End job** to close that specific interval. Each user may have only one active job. References are trimmed labels of 1-255 characters without control characters; they do not select folders or verify Sales Orders yet. Reusing a reference creates another interval rather than overwriting history.
+Version 0.1.13 adds independent job intervals. Enable **Enable job tracking** and grant job permission (when restricted mode is on). On the dashboard, enter a Sales Order/job reference and select **Start job**; select **End job** to close that specific interval. Each user may have only one active job. References are trimmed labels of 1-255 characters without control characters; they do not select folders or verify Sales Orders yet. Reusing a reference creates another interval rather than overwriting history.
 
 Job-only users do not need shift tracking. With both global modes enabled, **Combined shift and job tracking** appears in administration:
 
@@ -121,7 +121,7 @@ After deploying new routes and running `occ upgrade`, verify the web endpoints a
 
 ### Keeping settings and time logs during updates
 
-Normal in-place app updates preserve all saved administration preferences (including non-default values), historical time logs, and active shifts. These live in Nextcloud's database, not in replaceable app files or browser storage. Defaults are used only when a preference has never been saved; startup and upgrades must not overwrite saved preferences.
+Normal in-place app updates preserve all saved administration preferences (including non-default values), historical shift/job logs, and active shifts/jobs. These live in Nextcloud's database, not in replaceable app files or browser storage. Defaults are used only when a preference has never been saved; startup and upgrades must not overwrite saved preferences.
 
 An active shift keeps its original ID, start timestamp, start date, and timezone through an update or web-process restart. Reload the dashboard after an update: the timer resumes from the saved server timestamp, including the update period, and clock-out records the entire interval. History remains available in the same dashboard.
 
@@ -139,7 +139,7 @@ php apps/timesheets/tests/upgrade.php /path/to/nextcloud verify /private/upgrade
 php apps/timesheets/tests/upgrade.php /path/to/nextcloud cleanup /private/upgrade-state.json
 ```
 
-The test temporarily changes all five global tracking preferences to non-default values, enables restricted access with an explicit user grant, and creates a test account with history and an open shift. Run it when other testing users are idle. It verifies saved settings/assignments and shift fields, administration/dashboard data, continued elapsed time, and clock-out across the upgrade in separate PHP processes. **Always run cleanup, even if deployment or verification fails**, to restore the original tracking/access settings and remove the test account/shifts. Keep the state file until cleanup succeeds. Verification requires a genuinely newer installed app version, not just another request on the same release. Adjust `apps` for `custom_apps`.
+The test temporarily changes global tracking and combined-mode preferences to non-default values, enables restricted access with an explicit user grant, and creates a test account with shift/job history and active intervals. Run it when other testing users are idle. It verifies saved settings/assignments and shift fields, administration/dashboard data, continued elapsed time, and clock-out across the upgrade in separate PHP processes. **Always run cleanup, even if deployment or verification fails**, to restore the original tracking/access settings and remove the test account/shifts. Keep the state file until cleanup succeeds. Verification requires a genuinely newer installed app version, not just another request on the same release. Adjust `apps` for `custom_apps`.
 
 ### Database migrations and persistence checks
 

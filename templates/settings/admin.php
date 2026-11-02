@@ -21,7 +21,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
 <div id="timesheets-admin" class="section">
     <h2><?php p($l->t('Timesheet Administration')); ?></h2>
     <p class="timesheets-intro"><?php p($l->t('Configure tracking preferences and time-recording rules for your organization.')); ?></p>
-    <p><?php p($l->t('Saved settings, shift history, and active shifts are retained when the app is updated. After an update, reload the dashboard to see your continuing shift; elapsed time includes the update period.')); ?></p>
+    <p><?php p($l->t('Saved settings, shift/job history, and active intervals are retained when the app is updated. After an update, reload the dashboard to see continuing timers; elapsed time includes the update period.')); ?></p>
     <p class="timesheets-notice"><?php p($l->t('Shift tracking and job tracking can each be used independently. Enable both to configure their interaction below. Users take unpaid breaks by clocking out and starting a new shift when they return; time between shifts is not counted. There is no separate break switch or automatic deduction. End active jobs before a break. Rounding and shift confirmations are still in development.')); ?></p>
 
     <form id="timesheets-admin-form" method="post" action="<?php p($_['saveUrl']); ?>">

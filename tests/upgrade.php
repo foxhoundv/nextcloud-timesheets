@@ -144,6 +144,7 @@ if ($phase === 'prepare') {
     $jobClock->clockOut($state['userId'], $jobClock->current($state['userId'])['id']);
     $jobClock->clockIn($state['userId'], 'upgrade-active');
     $state['jobs'] = array_map('jobSnapshot', Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($state['userId']));
+    $state['activeJob'] = $jobClock->current($state['userId']);
     $config->setAppValue('timesheets', 'job_require_shift', '1');
     $config->setAppValue('timesheets', 'shift_end_job_policy', 'allow');
     $state['combined'] = ['job_require_shift' => '1', 'shift_end_job_policy' => 'allow'];
@@ -194,6 +195,7 @@ if ($phase === 'cleanup') {
         } else {
             $config->setAppValue('timesheets', $key, $value);
         }
+        check($config->getAppValue('timesheets', $key, '') === $value, 'Original combined tracking preference restored: ' . $key);
     }
     foreach ($state['previous'] as $key => $value) {
         check($config->getAppValue('timesheets', $key, '__absent__') === ($value ?? '__absent__'),
@@ -258,7 +260,13 @@ if (isset($state['jobs'])) {
     }
     check($params['activeJob'] !== null && count($params['jobEntries']) === 2,
         'Dashboard retains active job and job history after upgrade');
+    check($params['activeJob']['id'] === $state['activeJob']['id']
+        && $params['activeJob']['elapsedSeconds'] > $state['activeJob']['elapsedSeconds'],
+        'Active job keeps counting through upgrade and restart');
     Server::get(\OCA\Timesheets\Service\JobClockService::class)->clockOut($state['userId'], $params['activeJob']['id']);
+    $job = $jobMapper->findByUser($state['userId'])[0];
+    check($job->getDurationSeconds() === strtotime($job->getClockOut() . ' UTC') - strtotime($job->getClockIn() . ' UTC'),
+        'Job clock-out after upgrade retains the full elapsed interval');
 }
 $clock->clockOut($state['userId'], $active['id']);
 $closed = $mapper->findByUser($state['userId'])[0];
