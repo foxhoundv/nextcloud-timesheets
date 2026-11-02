@@ -133,7 +133,7 @@ try {
     $entries = array_values(array_filter($apps, static fn ($app) => $app['id'] === 'timesheets'));
     check(count($entries) === 1 && str_contains($entries[0]['href'], '/apps/timesheets'),
         'Regular account sees one Timesheets app-menu entry linked to the dashboard');
-    $icon = request('/custom_apps/timesheets/img/app.svg');
+    $icon = request(parse_url($entries[0]['icon'], PHP_URL_PATH));
     check($icon['status'] === 200 && str_contains($icon['body'], '<svg'), 'Timesheets menu icon is accessible');
     $token = tokenFrom($dashboard['body']);
     $denied = request('/index.php/settings/admin/timesheets');

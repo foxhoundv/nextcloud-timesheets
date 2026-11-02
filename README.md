@@ -40,6 +40,14 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
    `php -l tests/persistence.php`
 6. Commit changes with descriptive messages and push to GitHub when ready.
 
+### Opening Timesheets
+
+- For daily use, sign in and choose **Timesheets** in Nextcloud's app menu. The dashboard is available to regular signed-in users for whom the app is enabled, not just administrators.
+- For configuration, open **Administration settings > Timesheets** as a Nextcloud administrator. Regular users cannot open or save these settings.
+- If an entry is missing after deployment, run `php occ upgrade` on the testing server and reload the page. App version 0.1.4 registers both entries through the app manifest.
+
+To check both entry points over HTTP, run `php apps/timesheets/tests/entrypoints.php /path/to/nextcloud https://testing-instance` on the testing server as its web-server user. Adjust the app path for `custom_apps`. This test creates a temporary account, checks regular-user access, briefly promotes it for admin-only checks, tests saving and CSRF protection, restores the original settings, and deletes the account and cookies. Use only the testing instance; its HTTPS certificate must be trusted by PHP/cURL.
+
 ### Database migrations and persistence checks
 
 Shift tables are created by Nextcloud migrations during installation or upgrade, never during page requests. Version 0.1.3 introduces the initial migration and leaves an existing, correctly prefixed shift table unchanged. Nextcloud applies its configured database table prefix automatically.
