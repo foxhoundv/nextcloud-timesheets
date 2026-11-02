@@ -40,7 +40,8 @@ $testUserId = 'timesheets-clock-' . bin2hex(random_bytes(8));
 $user = Server::get(IUserManager::class)->createUser($testUserId, bin2hex(random_bytes(24)));
 check($user !== false, 'Clock test account created');
 $mapper = new ShiftMapper($db);
-$service = new ShiftClockService($mapper, $config, $clock, Server::get(\OCA\Timesheets\Service\AccessService::class));
+$service = new ShiftClockService($mapper, $config, $clock, Server::get(\OCA\Timesheets\Service\AccessService::class),
+    Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
 $saved = [];
 
 function expectConflict(callable $action, int $code, string $message): void {
@@ -141,7 +142,8 @@ try {
     $session->setUser($user);
     $page = new \OCA\Timesheets\Controller\PageController('timesheets', Server::get(\OCP\IRequest::class),
         new \OCA\Timesheets\Service\ShiftService($mapper), $session, $service,
-        Server::get(\OCP\IURLGenerator::class), Server::get(\OCA\Timesheets\Service\AccessService::class));
+        Server::get(\OCP\IURLGenerator::class), Server::get(\OCA\Timesheets\Service\AccessService::class),
+        Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
     $params = $page->index()->getParams();
     $totalMinutes = $previousMinutes + 480;
     check($params['stats'][0]['value'] === sprintf('%dh %02dm', intdiv($totalMinutes, 60), $totalMinutes % 60),
@@ -185,5 +187,9 @@ try {
     if (!$user->delete()) {
         throw new RuntimeException('Failed to remove clock test account');
     }
+    $cleanup = $db->getQueryBuilder();
+    $cleanup->delete('timesheets_clock_locks')
+        ->where($cleanup->expr()->eq('user_id', $cleanup->createNamedParameter($testUserId)));
+    $cleanup->executeStatement();
 }
 echo "Shift clock checks passed; test shifts and account removed, tracking setting restored.\n";

@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use OCA\Timesheets\Db\Shift;
 use OCA\Timesheets\Db\ShiftMapper;
+use OCA\Timesheets\Db\JobMapper;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\DB\Exception;
 use OCP\IConfig;
@@ -18,6 +19,8 @@ class ShiftClockService {
         private IConfig $config,
         private ITimeFactory $time,
         private AccessService $access,
+        private ClockTransaction $transaction,
+        private JobMapper $jobs,
     ) {
     }
 
@@ -45,6 +48,10 @@ class ShiftClockService {
     }
 
     public function clockIn(string $userId): Shift {
+        return $this->transaction->run($userId, fn (): Shift => $this->start($userId));
+    }
+
+    private function start(string $userId): Shift {
         if (!$this->isEnabled()) {
             throw new \DomainException('Shift tracking is disabled. Ask an administrator to enable it.', 403);
         }
@@ -72,12 +79,20 @@ class ShiftClockService {
     }
 
     public function clockOut(string $userId, int $shiftId): void {
+        $this->transaction->run($userId, fn () => $this->stop($userId, $shiftId));
+    }
+
+    private function stop(string $userId, int $shiftId): void {
         if ($shiftId <= 0) {
             throw new \DomainException('A valid shift ID is required.', 400);
         }
         $shift = $this->shiftMapper->findOpenForUser($userId);
         if ($shift === null || $shift->getId() !== $shiftId) {
             throw new \DomainException('This shift is no longer open. Refresh the page before trying again.', 409);
+        }
+        if ($this->jobs->findOpenForUser($userId) !== null
+            && $this->config->getAppValue('timesheets', 'shift_end_job_policy', 'block') === 'block') {
+            throw new \DomainException('End your active job before clocking out of the shift.', 409);
         }
         $now = $this->now();
         $seconds = $now->getTimestamp() - $this->parseTimestamp($shift->getClockIn())->getTimestamp();

@@ -47,7 +47,43 @@ $entries = $_['entries'];
         <?php endif; ?>
         <p class="timesheets-clock-help"><?php p($l->t('Taking a break? Clock out when your break starts, then clock in again when you return. Each work period is a separate shift; time between shifts is excluded from recorded work time.')); ?></p>
         <p class="timesheets-clock-help"><?php p($l->t('There is no paused shift or automatic break deduction. Time while clocked in counts as work. Starting again requires shift tracking and your shift permission to remain enabled.')); ?></p>
-        <p class="timesheets-clock-help"><?php p($l->t('Actual elapsed time is saved using the server clock. Rounding, job tracking, and long-shift confirmations are not available yet.')); ?></p>
+        <p class="timesheets-clock-help"><?php p($l->t('Actual elapsed time is saved using the server clock. Rounding and long-shift confirmations are not available yet. End active jobs before taking an unpaid break; a job left running continues recording time even outside a shift.')); ?></p>
+    </section>
+
+    <section class="timesheets-notice" aria-labelledby="timesheets-job-title">
+        <h2 id="timesheets-job-title"><?php p($l->t('Your current job')); ?></h2>
+        <?php if ($_['activeJob'] !== null): ?>
+            <p><?php p($l->t('Active job: %s', [$_['activeJob']['reference']])); ?></p>
+            <p><?php p($l->t('Started %s.', [$_['activeJob']['startedAt']])); ?></p>
+            <p class="timesheets-elapsed"><?php p($l->t('Job elapsed time:')); ?>
+                <span id="timesheets-job-elapsed" data-seconds="<?php p((string) $_['activeJob']['elapsedSeconds']); ?>"><?php p(sprintf('%dh %02dm %02ds', intdiv($_['activeJob']['elapsedSeconds'], 3600), intdiv($_['activeJob']['elapsedSeconds'] % 3600, 60), $_['activeJob']['elapsedSeconds'] % 60)); ?></span>
+            </p>
+            <?php if (!$_['jobTrackingEnabled'] || !$_['canStartJob']): ?>
+                <p><?php p($l->t('New job tracking is unavailable, but you can still end this active job and view its history.')); ?></p>
+            <?php endif; ?>
+        <?php elseif (!$_['jobTrackingEnabled']): ?>
+            <p><?php p($l->t('Job tracking is disabled. Ask an administrator to enable it.')); ?></p>
+        <?php elseif (!$_['canStartJob']): ?>
+            <p><?php p($l->t('You do not have permission to start jobs. You can still view your job history.')); ?></p>
+        <?php elseif ($_['jobRequiresShift'] && $_['activeShift'] === null): ?>
+            <p><?php p($l->t('Clock into a shift before starting a job.')); ?></p>
+        <?php else: ?>
+            <p><?php p($l->t('No job is active. Enter a Sales Order or job reference to begin.')); ?></p>
+        <?php endif; ?>
+        <?php if ($_['activeJob'] !== null || ($_['jobTrackingEnabled'] && $_['canStartJob'] && (!$_['jobRequiresShift'] || $_['activeShift'] !== null))): ?>
+            <form id="timesheets-job-form" method="post" action="<?php p($_['activeJob'] === null ? $_['jobClockInUrl'] : $_['jobClockOutUrl']); ?>">
+                <?php if ($_['activeJob'] !== null): ?>
+                    <input type="hidden" name="jobId" value="<?php p((string) $_['activeJob']['id']); ?>">
+                <?php else: ?>
+                    <label for="timesheets-job-reference"><?php p($l->t('Sales Order / job reference')); ?></label>
+                    <input id="timesheets-job-reference" name="reference" type="text" required maxlength="255" aria-describedby="timesheets-job-help">
+                <?php endif; ?>
+                <button type="submit" class="primary"><?php p($l->t($_['activeJob'] === null ? 'Start job' : 'End job')); ?></button>
+                <p role="status" aria-live="polite"></p>
+            </form>
+            <noscript><p><?php p($l->t('Enable JavaScript to start and end jobs.')); ?></p></noscript>
+        <?php endif; ?>
+        <p id="timesheets-job-help" class="timesheets-clock-help"><?php p($l->t('One job can be active at a time. Job intervals are recorded separately from shifts; do not add job time to shift time as extra work. References are labels only, not linked to folders yet.')); ?></p>
     </section>
 
     <section aria-labelledby="timesheets-overview">
@@ -98,6 +134,36 @@ $entries = $_['entries'];
                             </td>
                         </tr>
                     <?php endforeach; ?>
+                </tbody>
+            </table>
+            </div>
+        <?php endif; ?>
+    </section>
+    <section id="timesheets-job-history" class="timesheets-panel" aria-labelledby="timesheets-job-history-title">
+        <h2 id="timesheets-job-history-title"><?php p($l->t('Job history')); ?></h2>
+        <?php if ($_['jobEntries'] === []): ?>
+            <p><?php p($l->t('No job intervals recorded yet.')); ?></p>
+        <?php else: ?>
+            <div class="timesheets-table-wrap" role="region" aria-label="<?php p($l->t('Job history table')); ?>" tabindex="0">
+            <table>
+                <caption><?php p($l->t('Your job intervals, newest first. Completed durations show whole minutes without rounding.')); ?></caption>
+                <thead><tr>
+                    <th scope="col"><?php p($l->t('Job reference')); ?></th>
+                    <th scope="col"><?php p($l->t('Start date')); ?></th>
+                    <th scope="col"><?php p($l->t('Started')); ?></th>
+                    <th scope="col"><?php p($l->t('Ended')); ?></th>
+                    <th scope="col"><?php p($l->t('Duration')); ?></th>
+                </tr></thead>
+                <tbody>
+                <?php foreach ($_['jobEntries'] as $entry): ?>
+                    <tr>
+                        <td><?php p($entry['reference']); ?></td>
+                        <td><?php p($entry['date']); ?></td>
+                        <td><?php p($entry['clockIn']); ?></td>
+                        <td><?php p($entry['clockOut'] ?? $l->t('In progress')); ?></td>
+                        <td><?php p($entry['total'] ?? $l->t('Not finalized')); ?></td>
+                    </tr>
+                <?php endforeach; ?>
                 </tbody>
             </table>
             </div>

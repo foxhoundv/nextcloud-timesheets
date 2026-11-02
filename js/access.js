@@ -99,7 +99,7 @@
                 checkbox.type = 'checkbox';
                 checkbox.dataset.permission = permission;
                 label.append(checkbox, document.createTextNode(t('timesheets',
-                    permission === 'shift' ? 'Shift tracking' : 'Job tracking (planned)')));
+                    permission === 'shift' ? 'Shift tracking' : 'Job tracking')));
                 chip.append(label);
             }
             grants.append(chip);

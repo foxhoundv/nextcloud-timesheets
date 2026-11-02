@@ -1,7 +1,6 @@
 (function() {
     function init() {
-        const elapsed = document.getElementById('timesheets-elapsed');
-        if (elapsed) {
+        document.querySelectorAll('#timesheets-elapsed, #timesheets-job-elapsed').forEach(function(elapsed) {
             const initialSeconds = Number(elapsed.dataset.seconds);
             const started = performance.now();
             const update = function() {
@@ -11,21 +10,19 @@
                     + String(seconds % 60).padStart(2, '0') + 's';
             };
             window.setInterval(update, 1000);
-        }
+        });
 
-        const form = document.getElementById('timesheets-clock-form');
-        if (!form) {
-            return;
-        }
-        const status = document.getElementById('timesheets-clock-status');
-        const button = form.querySelector('button[type="submit"]');
-        form.addEventListener('submit', async function(event) {
+        const forms = Array.from(document.querySelectorAll('#timesheets-clock-form, #timesheets-job-form'));
+        const buttons = forms.map(form => form.querySelector('button[type="submit"]'));
+        forms.forEach(form => form.addEventListener('submit', async function(event) {
+            const status = form.querySelector('[role="status"]');
+            const button = form.querySelector('button[type="submit"]');
             event.preventDefault();
             if (button.disabled) {
                 return;
             }
-            button.disabled = true;
-            status.textContent = t('timesheets', 'Saving your shift...');
+            buttons.forEach(button => { button.disabled = true; });
+            status.textContent = t('timesheets', 'Saving your time...');
             try {
                 const response = await fetch(form.action, {
                     method: 'POST',
@@ -42,20 +39,20 @@
                         status.textContent = data.message || t('timesheets', 'Unable to record time. Refresh the page and try again.');
                         return;
                     }
-                    throw new Error('Shift request failed: ' + response.status);
+                    throw new Error('Time request failed: ' + response.status);
                 }
                 const data = await response.json();
                 if (data.status !== 'ok') {
-                    throw new Error('Unexpected shift response');
+                    throw new Error('Unexpected time response');
                 }
                 window.location.reload();
             } catch (error) {
-                console.error('Timesheets could not record the shift.', error);
-                status.textContent = t('timesheets', 'Unable to confirm that your shift was saved. Refresh the page to check before trying again.');
+                console.error('Timesheets could not record time.', error);
+                status.textContent = t('timesheets', 'Unable to confirm that your time was saved. Refresh the page to check before trying again.');
             } finally {
-                button.disabled = false;
+                buttons.forEach(button => { button.disabled = false; });
             }
-        });
+        }));
     }
 
     if (document.readyState === 'loading') {

@@ -63,12 +63,22 @@ function snapshot(Shift $shift): array {
     ];
 }
 
+function jobSnapshot(\OCA\Timesheets\Db\Job $job): array {
+    return [
+        'id' => $job->getId(), 'reference' => $job->getJobReference(), 'date' => $job->getJobDate(),
+        'clockIn' => $job->getClockIn(), 'clockOut' => $job->getClockOut(),
+        'durationSeconds' => $job->getDurationSeconds(), 'timeZone' => $job->getTimeZone(),
+        'openUserId' => $job->getOpenUserId(),
+    ];
+}
+
 $config = Server::get(IConfig::class);
 $users = Server::get(IUserManager::class);
 $db = Server::get(IDBConnection::class);
 $mapper = new ShiftMapper($db);
 $access = Server::get(\OCA\Timesheets\Service\AccessService::class);
-$clock = new ShiftClockService($mapper, $config, Server::get(ITimeFactory::class), $access);
+$clock = new ShiftClockService($mapper, $config, Server::get(ITimeFactory::class), $access,
+    Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
 $preferences = [
     'shift_tracking' => '1',
     'job_tracking' => '1',
@@ -88,6 +98,10 @@ if ($phase === 'prepare') {
         'previous' => $previous,
         'version' => $config->getAppValue('timesheets', 'installed_version'),
         'previousAccess' => $config->getAppValue('timesheets', 'access_policy', ''),
+        'previousCombined' => [
+            'job_require_shift' => $config->getAppValue('timesheets', 'job_require_shift', ''),
+            'shift_end_job_policy' => $config->getAppValue('timesheets', 'shift_end_job_policy', ''),
+        ],
     ];
     $oldMask = umask(0077);
     try {
@@ -125,6 +139,14 @@ if ($phase === 'prepare') {
     $history->setStatus('closed');
     $mapper->insert($history);
     $clock->clockIn($state['userId']);
+    $jobClock = Server::get(\OCA\Timesheets\Service\JobClockService::class);
+    $jobClock->clockIn($state['userId'], 'upgrade-history');
+    $jobClock->clockOut($state['userId'], $jobClock->current($state['userId'])['id']);
+    $jobClock->clockIn($state['userId'], 'upgrade-active');
+    $state['jobs'] = array_map('jobSnapshot', Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($state['userId']));
+    $config->setAppValue('timesheets', 'job_require_shift', '1');
+    $config->setAppValue('timesheets', 'shift_end_job_policy', 'allow');
+    $state['combined'] = ['job_require_shift' => '1', 'shift_end_job_policy' => 'allow'];
     $state['shifts'] = array_map('snapshot', $mapper->findByUser($state['userId']));
     $state['active'] = $clock->current($state['userId']);
     $json = json_encode($state, JSON_THROW_ON_ERROR);
@@ -143,6 +165,10 @@ if (!is_array($state) || !is_string($state['userId'] ?? null)
 }
 
 if ($phase === 'cleanup') {
+    $jobMapper = Server::get(\OCA\Timesheets\Db\JobMapper::class);
+    foreach ($jobMapper->findByUser($state['userId']) as $job) {
+        $jobMapper->delete($job);
+    }
     $query = $db->getQueryBuilder();
     $query->delete('timesheets_shifts')
         ->where($query->expr()->eq('user_id', $query->createNamedParameter($state['userId'])));
@@ -162,11 +188,22 @@ if ($phase === 'cleanup') {
     } else {
         $config->setAppValue('timesheets', 'access_policy', $state['previousAccess']);
     }
+    foreach ($state['previousCombined'] ?? [] as $key => $value) {
+        if ($value === '') {
+            $config->deleteAppValue('timesheets', $key);
+        } else {
+            $config->setAppValue('timesheets', $key, $value);
+        }
+    }
     foreach ($state['previous'] as $key => $value) {
         check($config->getAppValue('timesheets', $key, '__absent__') === ($value ?? '__absent__'),
             'Original administration preference restored: ' . $key);
     }
     check($mapper->findByUser($state['userId']) === [], 'Temporary upgrade shifts removed');
+    $query = $db->getQueryBuilder();
+    $query->delete('timesheets_clock_locks')
+        ->where($query->expr()->eq('user_id', $query->createNamedParameter($state['userId'])));
+    $query->executeStatement();
     check(unlink($stateFile), 'Upgrade test state removed');
     echo "Upgrade cleanup passed.\n";
     exit(0);
@@ -203,7 +240,8 @@ check($user !== null, 'Account survives upgrade');
 $session = Server::get(IUserSession::class);
 $session->setUser($user);
 $page = new PageController('timesheets', Server::get(IRequest::class), new ShiftService($mapper),
-    $session, $clock, Server::get(IURLGenerator::class), $access);
+    $session, $clock, Server::get(IURLGenerator::class), $access,
+    Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
 $params = $page->index()->getParams();
 check($params['activeShift']['id'] === $active['id'] && $params['trackingEnabled'],
     'Dashboard still receives the active clock-out control and elapsed time');
@@ -211,6 +249,17 @@ check(count($params['entries']) === 2 && $params['entries'][1]['total'] === '2h 
     && $params['entries'][1]['clockIn'] === '2026-10-01 08:00:00 PDT'
     && $params['entries'][1]['clockOut'] === '2026-10-01 10:05:37 PDT',
     'Historical time log remains visible with original timestamps and duration');
+if (isset($state['jobs'])) {
+    $jobMapper = Server::get(\OCA\Timesheets\Db\JobMapper::class);
+    check(array_map('jobSnapshot', $jobMapper->findByUser($state['userId'])) === $state['jobs'],
+        'Historical and active job intervals survive upgrade unchanged');
+    foreach ($state['combined'] as $key => $value) {
+        check($config->getAppValue('timesheets', $key) === $value, 'Combined tracking preference survives upgrade: ' . $key);
+    }
+    check($params['activeJob'] !== null && count($params['jobEntries']) === 2,
+        'Dashboard retains active job and job history after upgrade');
+    Server::get(\OCA\Timesheets\Service\JobClockService::class)->clockOut($state['userId'], $params['activeJob']['id']);
+}
 $clock->clockOut($state['userId'], $active['id']);
 $closed = $mapper->findByUser($state['userId'])[0];
 check($closed->getStatus() === 'closed' && $clock->current($state['userId']) === null,

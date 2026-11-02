@@ -31,7 +31,8 @@ check($user !== false, 'Access test user created');
 $group = null;
 $otherGroup = null;
 $mapper = new ShiftMapper($db);
-$clock = new ShiftClockService($mapper, $config, Server::get(ITimeFactory::class), $access);
+$clock = new ShiftClockService($mapper, $config, Server::get(ITimeFactory::class), $access,
+    Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
 
 function savePolicy(bool $restricted, array $grants): void {
     global $access;
@@ -60,7 +61,8 @@ try {
     $session = Server::get(IUserSession::class);
     $session->setUser($user);
     $page = new PageController('timesheets', Server::get(IRequest::class), new ShiftService($mapper),
-        $session, $clock, Server::get(IURLGenerator::class), $access);
+        $session, $clock, Server::get(IURLGenerator::class), $access,
+        Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
     check($page->index()->getStatus() === 403, 'Unassigned user without history receives explicit access denial');
     $grant = ['type' => 'user', 'id' => $id, 'shift' => false, 'job' => false];
     savePolicy(true, [$grant]);
@@ -158,6 +160,9 @@ try {
         }
     }
     check($user->delete(), 'Access test user removed');
+    $cleanup = $db->getQueryBuilder();
+    $cleanup->delete('timesheets_clock_locks')->where($cleanup->expr()->eq('user_id', $cleanup->createNamedParameter($id)));
+    $cleanup->executeStatement();
     Server::get(IAppConfig::class)->clearCache();
     foreach (['access_policy' => $previous, 'shift_tracking' => $tracking] as $key => $value) {
         if ($value === '') {

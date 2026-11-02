@@ -24,7 +24,13 @@ class AdminController extends Controller {
         string $shift_rounding = '15',
         string $job_rounding = '15',
         string $net_shift_threshold = '0',
+        ?string $job_require_shift = null,
+        ?string $shift_end_job_policy = null,
     ): JSONResponse {
+        if (($job_require_shift !== null && !in_array($job_require_shift, ['0', '1'], true))
+            || ($shift_end_job_policy !== null && !in_array($shift_end_job_policy, ['block', 'allow'], true))) {
+            return new JSONResponse(['message' => 'Choose valid shift/job interaction settings.'], 400);
+        }
         $allowedRounding = ['5', '10', '15', '30'];
 
         $settings = [
@@ -34,6 +40,12 @@ class AdminController extends Controller {
             'job_rounding' => in_array($job_rounding, $allowedRounding, true) ? $job_rounding : '15',
             'net_shift_threshold' => max(0, (int) $net_shift_threshold),
         ];
+        if ($job_require_shift !== null) {
+            $settings['job_require_shift'] = $job_require_shift;
+        }
+        if ($shift_end_job_policy !== null) {
+            $settings['shift_end_job_policy'] = $shift_end_job_policy;
+        }
 
         foreach ($settings as $key => $value) {
             $this->config->setAppValue('timesheets', $key, (string) $value);

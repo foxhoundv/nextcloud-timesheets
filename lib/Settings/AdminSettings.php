@@ -31,6 +31,8 @@ class AdminSettings implements ISettings {
             'settings' => $settings,
             'saveUrl' => $this->urlGenerator->linkToRoute('timesheets.admin.save'),
             'accessPolicy' => $this->access->policy(),
+            'jobRequireShift' => $this->config->getAppValue('timesheets', 'job_require_shift', '0') === '1',
+            'shiftEndJobPolicy' => $this->config->getAppValue('timesheets', 'shift_end_job_policy', 'block'),
             'accessSaveUrl' => $this->urlGenerator->linkToRoute('timesheets.access.save'),
             'accessDirectory' => [
                 'group' => $this->access->directory('group'),

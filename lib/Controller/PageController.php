@@ -7,6 +7,8 @@ namespace OCA\Timesheets\Controller;
 use OCA\Timesheets\Service\ShiftService;
 use OCA\Timesheets\Service\ShiftClockService;
 use OCA\Timesheets\Service\AccessService;
+use OCA\Timesheets\Service\JobClockService;
+use OCA\Timesheets\Db\JobMapper;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -24,6 +26,8 @@ class PageController extends Controller {
         private ShiftClockService $clock,
         private IURLGenerator $urlGenerator,
         private AccessService $access,
+        private JobClockService $jobClock,
+        private JobMapper $jobs,
     ) {
         parent::__construct($appName, $request);
     }
@@ -35,8 +39,9 @@ class PageController extends Controller {
         $userId = $user ? $user->getUID() : '';
 
         $shifts = $this->shiftService->listForUser($userId);
+        $jobs = $this->jobs->findByUser($userId);
         $permissions = $this->access->permissions($userId);
-        if (!$permissions['access'] && $shifts === []) {
+        if (!$permissions['access'] && $shifts === [] && $jobs === []) {
             $response = new TemplateResponse('timesheets', 'denied');
             $response->setStatus(403);
             return $response;
@@ -53,7 +58,30 @@ class PageController extends Controller {
             'activeShift' => $this->clock->current($userId),
             'clockInUrl' => $this->urlGenerator->linkToRoute('timesheets.shift.clockIn'),
             'clockOutUrl' => $this->urlGenerator->linkToRoute('timesheets.shift.clockOut'),
+            'jobTrackingEnabled' => $this->jobClock->isEnabled(),
+            'canStartJob' => $permissions['job'],
+            'jobRequiresShift' => $this->jobClock->requiresShift($userId),
+            'activeJob' => $this->jobClock->current($userId),
+            'jobEntries' => $this->jobEntries($jobs, $userId),
+            'jobClockInUrl' => $this->urlGenerator->linkToRoute('timesheets.job.clockIn'),
+            'jobClockOutUrl' => $this->urlGenerator->linkToRoute('timesheets.job.clockOut'),
         ]);
+    }
+
+    private function jobEntries(array $jobs, string $userId): array {
+        $entries = [];
+        foreach ($jobs as $job) {
+            $open = $job->getClockOut() === null;
+            $zone = $open ? new \DateTimeZone($job->getTimeZone()) : $this->clock->userTimeZone($userId);
+            $entries[] = [
+                'reference' => $job->getJobReference(),
+                'date' => $job->getJobDate(),
+                'clockIn' => $this->clock->parseTimestamp($job->getClockIn())->setTimezone($zone)->format('Y-m-d H:i:s T'),
+                'clockOut' => $open ? null : $this->clock->parseTimestamp($job->getClockOut())->setTimezone($zone)->format('Y-m-d H:i:s T'),
+                'total' => $open ? null : $this->formatMinutes(intdiv($job->getDurationSeconds(), 60)),
+            ];
+        }
+        return $entries;
     }
 
     private function buildStats(array $shifts): array {

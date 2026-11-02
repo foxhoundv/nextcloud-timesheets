@@ -130,12 +130,25 @@
     margin: 12px 0;
 }
 
-#timesheets #timesheets-clock-form {
+#timesheets #timesheets-clock-form,
+#timesheets #timesheets-job-form {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 16px;
     margin: 16px 0;
+}
+
+#timesheets #timesheets-job-reference {
+    max-width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    color: var(--color-main-text);
+    background: var(--color-main-background);
+}
+
+#timesheets #timesheets-job-history {
+    margin-top: 24px;
 }
 
 #timesheets .timesheets-clock-help {

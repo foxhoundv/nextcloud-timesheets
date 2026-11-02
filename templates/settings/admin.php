@@ -22,7 +22,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
     <h2><?php p($l->t('Timesheet Administration')); ?></h2>
     <p class="timesheets-intro"><?php p($l->t('Configure tracking preferences and time-recording rules for your organization.')); ?></p>
     <p><?php p($l->t('Saved settings, shift history, and active shifts are retained when the app is updated. After an update, reload the dashboard to see your continuing shift; elapsed time includes the update period.')); ?></p>
-    <p class="timesheets-notice"><?php p($l->t('Shift tracking enables clock-in/out with actual elapsed time. Users take unpaid breaks by clocking out and starting a new shift when they return; time between shifts is not counted. There is no separate break switch or automatic deduction. Job tracking, rounding, and shift confirmations are still in development; their preferences are saved but not yet applied.')); ?></p>
+    <p class="timesheets-notice"><?php p($l->t('Shift tracking and job tracking can each be used independently. Enable both to configure their interaction below. Users take unpaid breaks by clocking out and starting a new shift when they return; time between shifts is not counted. There is no separate break switch or automatic deduction. End active jobs before a break. Rounding and shift confirmations are still in development.')); ?></p>
 
     <form id="timesheets-admin-form" method="post" action="<?php p($_['saveUrl']); ?>">
         <fieldset>
@@ -38,10 +38,34 @@ foreach ($_['accessDirectory'] as $type => $entries) {
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">
                 <label for="job_tracking"><?php p($l->t('Enable job tracking')); ?></label>
-                <p id="job_tracking_help"><?php p($l->t('Record time spent on individual Sales Order jobs separately from overall shift time. Time within a shift that is not assigned to a job will count as shop time.')); ?></p>
+                <p id="job_tracking_help"><?php p($l->t('Allow permitted users to start and end one job at a time using a Sales Order or job reference. Can be used without shift tracking. References are not linked to folders yet; shop-time calculations are planned. Disabling this prevents new jobs but lets users finish an active job.')); ?></p>
             </div>
             <input type="checkbox" id="job_tracking" name="job_tracking" value="1" aria-describedby="job_tracking_help" <?php echo !empty($settings['job_tracking']) ? 'checked' : ''; ?>>
         </div>
+        </fieldset>
+
+        <fieldset id="timesheets-combined-settings" <?php echo !$settings['shift_tracking'] || !$settings['job_tracking'] ? 'hidden' : ''; ?>>
+            <legend><?php p($l->t('Combined shift and job tracking')); ?></legend>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="job_require_shift"><?php p($l->t('Require a shift before starting a job')); ?></label>
+                    <p id="job_require_shift_help"><?php p($l->t('Applies only when both global tracking modes and both permissions are enabled for the user. Off allows independent job clock-in. Job-only users can always work without a shift.')); ?></p>
+                </div>
+                <select id="job_require_shift" name="job_require_shift" aria-describedby="job_require_shift_help">
+                    <option value="0" <?php echo !$_['jobRequireShift'] ? 'selected' : ''; ?>><?php p($l->t('No (default)')); ?></option>
+                    <option value="1" <?php echo $_['jobRequireShift'] ? 'selected' : ''; ?>><?php p($l->t('Yes')); ?></option>
+                </select>
+            </div>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="shift_end_job_policy"><?php p($l->t('Shift clock-out with an active job')); ?></label>
+                    <p id="shift_end_job_policy_help"><?php p($l->t('Block requires the user to end the job first. Allow ends only the shift; the job keeps counting until explicitly ended, including breaks and time outside a shift. This protects existing intervals even if tracking or permissions are later disabled.')); ?></p>
+                </div>
+                <select id="shift_end_job_policy" name="shift_end_job_policy" aria-describedby="shift_end_job_policy_help">
+                    <option value="block" <?php echo $_['shiftEndJobPolicy'] === 'block' ? 'selected' : ''; ?>><?php p($l->t('Block until job ends (default)')); ?></option>
+                    <option value="allow" <?php echo $_['shiftEndJobPolicy'] === 'allow' ? 'selected' : ''; ?>><?php p($l->t('Allow; leave job running')); ?></option>
+                </select>
+            </div>
         </fieldset>
 
         <fieldset>
@@ -91,7 +115,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
 
     <h2><?php p($l->t('User and group access')); ?></h2>
     <p class="timesheets-intro"><?php p($l->t('By default, everyone with Nextcloud app access can use enabled tracking features. Restricted mode limits new activity to assigned users and groups. It does not override Nextcloud app-level restrictions.')); ?></p>
-    <p class="timesheets-intro"><?php p($l->t('Assignments combine: a user receives each permission granted directly or by any group. An assignment without tracking permissions grants dashboard access only. Global tracking switches above still apply. Job permissions are saved for future job tracking; job recording is not available yet.')); ?></p>
+    <p class="timesheets-intro"><?php p($l->t('Assignments combine: a user receives each permission granted directly or by any group. An assignment without tracking permissions grants dashboard access only. Global tracking switches above still apply. Shift and job permissions can be granted independently.')); ?></p>
     <p class="timesheets-intro"><?php p($l->t('After access is removed, users can still view their own saved history and finish an open shift, but cannot start new shifts. Nextcloud administrators always manage these settings; assignments do not grant administration rights.')); ?></p>
     <form id="timesheets-access-form" method="post" action="<?php p($_['accessSaveUrl']); ?>">
         <div class="timesheets-admin-row">
@@ -135,7 +159,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
                         <button type="button" data-remove aria-label="<?php p($l->t('Remove assignment for %s', [$name])); ?>"><span aria-hidden="true">&times;</span></button>
                         <span><?php p($l->t($grant['type'] === 'user' ? 'User' : 'Group') . ': ' . $name); ?></span>
                         <label><input type="checkbox" data-permission="shift" <?php echo $grant['shift'] ? 'checked' : ''; ?>><?php p($l->t('Shift tracking')); ?></label>
-                        <label><input type="checkbox" data-permission="job" <?php echo $grant['job'] ? 'checked' : ''; ?>><?php p($l->t('Job tracking (planned)')); ?></label>
+                        <label><input type="checkbox" data-permission="job" <?php echo $grant['job'] ? 'checked' : ''; ?>>                        <?php p($l->t('Job tracking')); ?></label>
                     </li>
                 <?php endforeach; ?>
         </ul>

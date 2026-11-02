@@ -6,6 +6,13 @@
         if (!form || !status) {
             return;
         }
+        const updateCombined = function() {
+            document.getElementById('timesheets-combined-settings').hidden =
+                !document.getElementById('shift_tracking').checked || !document.getElementById('job_tracking').checked;
+        };
+        document.getElementById('shift_tracking').addEventListener('change', updateCombined);
+        document.getElementById('job_tracking').addEventListener('change', updateCombined);
+        updateCombined();
 
         form.addEventListener('submit', async function(event) {
             event.preventDefault();

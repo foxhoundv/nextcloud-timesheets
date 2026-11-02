@@ -51,7 +51,8 @@ check(count(array_filter($settings, static fn ($setting) => $setting instanceof 
     'Timesheets admin form is registered exactly once');
 
 $config = Server::get(IConfig::class);
-$keys = ['shift_tracking', 'job_tracking', 'shift_rounding', 'job_rounding', 'net_shift_threshold'];
+$keys = ['shift_tracking', 'job_tracking', 'shift_rounding', 'job_rounding', 'net_shift_threshold',
+    'job_require_shift', 'shift_end_job_policy'];
 $originalValues = [];
 $existingKeys = $config->getAppKeys('timesheets');
 foreach ($keys as $key) {
@@ -285,8 +286,8 @@ try {
     $adminPath = new DOMXPath($adminDocument);
     check(trim($adminPath->query('//*[@id="timesheets-admin"]/h2')->item(0)->textContent) === 'Timesheet Administration',
         'Administration page has the requested title');
-    check($adminPath->query('//*[@id="timesheets-admin-form"]/fieldset')->length === 3,
-        'Settings are grouped into tracking, rounding, and shift review');
+    check($adminPath->query('//*[@id="timesheets-admin-form"]/fieldset')->length === 4,
+        'Settings include combined tracking, rounding, and shift review');
     foreach ($keys as $key) {
         $control = $adminDocument->getElementById($key);
         $help = $control === null ? null : $adminDocument->getElementById($control->getAttribute('aria-describedby'));
@@ -301,6 +302,8 @@ try {
         'shift_rounding' => '5',
         'job_rounding' => '30',
         'net_shift_threshold' => '480',
+        'job_require_shift' => '0',
+        'shift_end_job_policy' => 'block',
     ];
     $denied = request('/index.php/apps/timesheets/settings', $payload);
     check($denied['status'] === 412, 'Settings save rejects requests without a CSRF token');
@@ -321,6 +324,30 @@ try {
     foreach ($payload as $key => $value) {
         check(($storedValues[$key] ?? null) === $value, 'Saved setting persists: ' . $key);
     }
+    $jobInPath = '/index.php/apps/timesheets/api/v1/jobs/clock-in';
+    $jobOutPath = '/index.php/apps/timesheets/api/v1/jobs/clock-out';
+    $adminGroup->removeUser($user);
+    check(request($jobInPath, ['reference' => 'SO-HTTP'])['status'] === 412, 'Job clock-in requires CSRF protection');
+    check(request($jobInPath, ['reference' => 'SO-HTTP <test>', 'userId' => 'someone-else',
+        'clockIn' => '2000-01-01'], $token)['status'] === 200, 'Regular user can start an independent job');
+    $jobMapper = Server::get(\OCA\Timesheets\Db\JobMapper::class);
+    $httpJob = $jobMapper->findOpenForUser($userId);
+    check($httpJob !== null && $httpJob->getUserId() === $userId
+        && str_starts_with($httpJob->getClockIn(), gmdate('Y-m-d')),
+        'Job identity and timestamp come from the server');
+    check(request($jobInPath, ['reference' => 'SO-duplicate'], $token)['status'] === 409,
+        'HTTP rejects duplicate active jobs');
+    $jobPage = request('/index.php/apps/timesheets/');
+    check($jobPage['status'] === 200 && str_contains($jobPage['body'], 'SO-HTTP &lt;test&gt;')
+        && str_contains($jobPage['body'], '>End job</button>'), 'Dashboard escapes job references and shows active job controls');
+    check(request($jobOutPath, ['jobId' => $httpJob->getId()])['status'] === 412, 'Job clock-out requires CSRF protection');
+    check(request($jobOutPath, ['jobId' => $httpJob->getId() + 1], $token)['status'] === 409,
+        'HTTP rejects stale job interval IDs');
+    check(request($jobOutPath, ['jobId' => $httpJob->getId()], $token)['status'] === 200,
+        'Regular user can end the specific active job');
+    check(request($jobOutPath, ['jobId' => $httpJob->getId()], $token)['status'] === 409,
+        'HTTP rejects repeated job clock-out');
+    $adminGroup->addUser($user);
     $accessPath = '/index.php/apps/timesheets/settings/access';
     $searchPath = $accessPath . '/search?type=user&query=' . rawurlencode($userId);
     $adminGroup->removeUser($user);
@@ -372,6 +399,12 @@ try {
     check($adminAccess['status'] === 200 && str_contains($adminAccess['body'], 'Save access settings'),
         'Nextcloud administrators retain settings access without an assignment');
 } finally {
+    foreach (Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($userId) as $entry) {
+        Server::get(\OCA\Timesheets\Db\JobMapper::class)->delete($entry);
+    }
+    $cleanup = Server::get(IDBConnection::class)->getQueryBuilder();
+    $cleanup->delete('timesheets_clock_locks')->where($cleanup->expr()->eq('user_id', $cleanup->createNamedParameter($userId)));
+    $cleanup->executeStatement();
     if ($accessSaved && $user !== null && $user !== false) {
         $adminGroup->addUser($user);
         $restored = request('/index.php/apps/timesheets/settings/access', [
