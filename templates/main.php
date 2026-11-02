@@ -31,7 +31,7 @@ $entries = $_['entries'];
         <?php elseif (!$_['canStartShift']): ?>
             <p><?php p($l->t('You do not have permission to start shifts. You can still view your history. Ask an administrator for access.')); ?></p>
         <?php elseif ($_['trackingEnabled']): ?>
-            <p><?php p($l->t('You are clocked out. Start a shift when you begin work.')); ?></p>
+            <p><?php p($l->t('You are clocked out. Start a shift when you begin work or return from a break.')); ?></p>
         <?php else: ?>
             <p><?php p($l->t('Shift tracking is disabled. Ask an administrator to enable it before starting a shift.')); ?></p>
         <?php endif; ?>
@@ -45,7 +45,9 @@ $entries = $_['entries'];
             </form>
             <noscript><p><?php p($l->t('Enable JavaScript to clock in and out.')); ?></p></noscript>
         <?php endif; ?>
-        <p class="timesheets-clock-help"><?php p($l->t('Actual elapsed time is saved using the server clock. Break tracking, rounding, job tracking, and long-shift confirmations are not available yet.')); ?></p>
+        <p class="timesheets-clock-help"><?php p($l->t('Taking a break? Clock out when your break starts, then clock in again when you return. Each work period is a separate shift; time between shifts is excluded from recorded work time.')); ?></p>
+        <p class="timesheets-clock-help"><?php p($l->t('There is no paused shift or automatic break deduction. Time while clocked in counts as work. Starting again requires shift tracking and your shift permission to remain enabled.')); ?></p>
+        <p class="timesheets-clock-help"><?php p($l->t('Actual elapsed time is saved using the server clock. Rounding, job tracking, and long-shift confirmations are not available yet.')); ?></p>
     </section>
 
     <section aria-labelledby="timesheets-overview">
@@ -63,7 +65,7 @@ $entries = $_['entries'];
 
     <section id="timesheets-history" class="timesheets-panel" aria-labelledby="timesheets-history-title" tabindex="-1">
         <h2 id="timesheets-history-title"><?php p($l->t('Shift history')); ?></h2>
-        <p class="timesheets-intro"><?php p($l->t('Your saved shifts, newest first. Durations are shown in hours and minutes, not decimal hours.')); ?></p>
+        <p class="timesheets-intro"><?php p($l->t('Your saved shifts, newest first. Work periods before and after a break appear as separate rows. Durations are shown in hours and minutes, not decimal hours.')); ?></p>
         <?php if ($entries === []): ?>
             <div class="timesheets-empty">
                 <h3><?php p($l->t('No shifts recorded yet')); ?></h3>

@@ -107,6 +107,49 @@ try {
         'Conditional update prevents a concurrent or repeated close from overwriting duration');
     check($service->current($testUserId) === null, 'No active shift remains after clock-out');
 
+    $previousMinutes = array_sum(array_map(static fn (Shift $entry): int => $entry->getDurationMinutes(),
+        $mapper->findByUser($testUserId)));
+    $config->setUserValue($testUserId, 'core', 'timezone', 'UTC');
+    $workPeriods = [];
+    foreach ([
+        ['08:00:00', '10:00:00'],
+        ['10:15:00', '12:00:00'],
+        ['12:45:00', '17:00:00'],
+    ] as [$start, $end]) {
+        $clock->timestamp = strtotime('2026-11-03 ' . $start . ' UTC');
+        check($service->current($testUserId) === null, 'Time off between shifts does not create an active shift');
+        $period = $service->clockIn($testUserId);
+        $saved[] = $period;
+        $workPeriods[] = $period->getId();
+        check($service->current($testUserId)['elapsedSeconds'] === 0,
+            'Returning to work starts a fresh timer without including the preceding gap');
+        $clock->timestamp = strtotime('2026-11-03 ' . $end . ' UTC');
+        $service->clockOut($testUserId, $period->getId());
+    }
+    $periods = array_values(array_filter($mapper->findByUser($testUserId),
+        static fn (Shift $entry): bool => in_array($entry->getId(), $workPeriods, true)));
+    check(count($periods) === 3 && count(array_unique($workPeriods)) === 3,
+        'Work periods separated by breaks have distinct saved shifts');
+    check(array_sum(array_map(static fn (Shift $entry): int => $entry->getDurationSeconds(), $periods)) === 28800,
+        'Eight hours of work excludes both breaks from the nine-hour span, to the second');
+    check(array_sum(array_map(static fn (Shift $entry): int => $entry->getDurationMinutes(), $periods)) === 480,
+        'Completed work minutes exclude the 15-minute and 45-minute gaps');
+    check(count(array_filter($periods, static fn (Shift $entry): bool =>
+        $entry->getShiftDate() === '2026-11-03' && $entry->getStatus() === 'closed')) === 3,
+        'Multiple work periods on the same date remain separate completed history records');
+    $session = Server::get(\OCP\IUserSession::class);
+    $session->setUser($user);
+    $page = new \OCA\Timesheets\Controller\PageController('timesheets', Server::get(\OCP\IRequest::class),
+        new \OCA\Timesheets\Service\ShiftService($mapper), $session, $service,
+        Server::get(\OCP\IURLGenerator::class), Server::get(\OCA\Timesheets\Service\AccessService::class));
+    $params = $page->index()->getParams();
+    $totalMinutes = $previousMinutes + 480;
+    check($params['stats'][0]['value'] === sprintf('%dh %02dm', intdiv($totalMinutes, 60), $totalMinutes % 60),
+        'Dashboard recorded-time total sums work periods without adding break gaps');
+    check(array_column(array_slice($params['entries'], 0, 3), 'total') === ['4h 15m', '1h 45m', '2h 00m']
+        && $params['activeShift'] === null,
+        'Dashboard shows each work period separately with no paused or active break session');
+
     $migration = new Version000106Date20261102190000($db);
     $migration->preSchemaChange($output, $schemaClosure, []);
     check(true, 'Clock migration accepts users without duplicate open shifts');

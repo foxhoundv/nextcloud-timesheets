@@ -191,6 +191,10 @@ try {
     check(str_contains($dashboard['body'], 'Your current shift')
         && !str_contains($dashboard['body'], 'Quick summary'),
         'Dashboard shows current shift controls instead of placeholder settings');
+    check(str_contains($dashboard['body'], 'Clock out when your break starts, then clock in again when you return.')
+        && str_contains($dashboard['body'], 'time between shifts is excluded')
+        && str_contains($dashboard['body'], 'There is no paused shift or automatic break deduction.'),
+        'Dashboard explains separate-shift breaks and excluded gaps without suggesting a pause timer');
     foreach ([
         ['2026-10-01', '2026-10-01 08:00:00', 'closed', 125],
         ['2026-10-02', '2026-10-02 08:00:00', 'open', 60],
@@ -266,6 +270,9 @@ try {
     check($admin['status'] === 200 && str_contains($admin['body'], 'timesheets-admin-form'),
         'Administrator can open Timesheets administration settings (HTTP ' . $admin['status'] . ')');
     check(str_contains($admin['body'], 'timesheets/js/admin.js'), 'Settings page loads the external save script');
+    check(str_contains($admin['body'], 'Users take unpaid breaks by clocking out and starting a new shift')
+        && str_contains($admin['body'], 'There is no separate break switch or automatic deduction.'),
+        'Administration explains unpaid breaks without an additional enable switch');
     check(!str_contains($admin['body'], "const form = document.getElementById('timesheets-admin-form')"),
         'Settings page does not rely on a CSP-blocked inline script');
     $adminDocument = pageDocument($admin['body']);
