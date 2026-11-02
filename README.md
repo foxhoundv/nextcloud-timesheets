@@ -72,6 +72,28 @@ On the testing server, run `php apps/timesheets/tests/shift-clock.php /path/to/n
 
 After deploying new routes and running `occ upgrade`, verify the web endpoints as well as CLI checks. If the web process still has an old APCu route list, refresh that testing instance's PHP/web process cache (or restart its container) and verify the login page is HTTP-ready before testing; a successful CLI upgrade alone does not clear a web worker's APCu cache.
 
+### Keeping settings and time logs during updates
+
+Normal in-place app updates preserve all saved administration preferences (including non-default values), historical time logs, and active shifts. These live in Nextcloud's database, not in replaceable app files or browser storage. Defaults are used only when a preference has never been saved; startup and upgrades must not overwrite saved preferences.
+
+An active shift keeps its original ID, start timestamp, start date, and timezone through an update or web-process restart. Reload the dashboard after an update: the timer resumes from the saved server timestamp, including the update period, and clock-out records the entire interval. History remains available in the same dashboard.
+
+Deploy new app files in place and run `php occ upgrade`; do not uninstall the app, delete its database tables/configuration, or restore an older database as an update procedure. Back up the Nextcloud database and app files together before upgrading. Database restoration or deletion can lose newer settings/time logs. Future schema changes must use additive or data-preserving migrations; never edit an already-applied migration to reset data.
+
+To regression-test an actual version upgrade **on the testing server only**, use the same private state-file path and web-server user for all phases:
+
+```sh
+# Before deploying the newer app, copy its tests/upgrade.php to a temporary path.
+php /tmp/timesheets-upgrade.php /path/to/nextcloud prepare /private/upgrade-state.json
+# Deploy the newer app, then run its upgrade.
+php occ upgrade
+# Refresh the testing instance's web-process cache if necessary.
+php apps/timesheets/tests/upgrade.php /path/to/nextcloud verify /private/upgrade-state.json
+php apps/timesheets/tests/upgrade.php /path/to/nextcloud cleanup /private/upgrade-state.json
+```
+
+The test temporarily changes all five global administration preferences to non-default values and creates a test account with history and an open shift. Run it when other testing users are idle. It verifies saved fields, administration/dashboard data, continued elapsed time, and clock-out across the upgrade in separate PHP processes. **Always run cleanup, even if deployment or verification fails**, to restore the original settings and remove the test account/shifts. Keep the state file until cleanup succeeds. Verification requires a genuinely newer installed app version, not just another request on the same release. Adjust `apps` for `custom_apps`.
+
 ### Database migrations and persistence checks
 
 Shift tables are created by Nextcloud migrations during installation or upgrade, never during page requests. Version 0.1.3 introduces the initial migration and leaves an existing, correctly prefixed shift table unchanged. Nextcloud applies its configured database table prefix automatically.

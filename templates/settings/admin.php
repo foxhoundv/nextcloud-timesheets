@@ -10,6 +10,7 @@ $settings = $_['settings'];
 <div id="timesheets-admin" class="section">
     <h2><?php p($l->t('Timesheet Administration')); ?></h2>
     <p class="timesheets-intro"><?php p($l->t('Configure tracking preferences and time-recording rules for your organization.')); ?></p>
+    <p><?php p($l->t('Saved settings, shift history, and active shifts are retained when the app is updated. After an update, reload the dashboard to see your continuing shift; elapsed time includes the update period.')); ?></p>
     <p class="timesheets-notice"><?php p($l->t('Shift tracking enables clock-in/out with actual elapsed time. Job tracking, breaks, rounding, and shift confirmations are still in development; their preferences are saved but not yet applied.')); ?></p>
 
     <form id="timesheets-admin-form" method="post" action="<?php p($_['saveUrl']); ?>">
