@@ -18,7 +18,7 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 - Shift and job rounding can be enabled independently. The administrator selects 5, 10, 15, or 30 minutes for each enabled rule.
 - A configurable net-shift threshold will trigger a confirmation after clock-out (planned). Unpaid breaks are gaps between separate shifts: clock out for a break, then clock in again when work resumes.
 - Shift intervals crossing midnight are attributed to their start date. Their duration remains the full elapsed interval.
-- Job intervals are separate rows, one for each clock-in/out pair. Time in a shift outside job intervals is shop time.
+- Job intervals are separate rows, one for each clock-in/out pair. Time in a shift outside job intervals will count as shop time when overlap calculations are implemented.
 - Completed times display using the employee's current time-zone setting. An open interval retains its clock-in time zone through clock-out.
 - Employee workbooks have monthly sheets 01 through 12, plus a yearly cumulative sheet. Yearly totals use rounded durations.
 - Employees use a print-ready app view; only administrators can access or edit workbook files.
@@ -89,7 +89,7 @@ Clock timestamps are UTC. A shift retains the user's Nextcloud time-zone prefere
 Version 0.1.10 explains and regression-tests the separate-shift break workflow:
 
 1. Select **Clock out** when a break begins. This finishes the current work period.
-2. Stay clocked out during the break. No shift is active and no work time accrues.
+2. Stay clocked out during the break. No shift is active and no shift time accrues. End any active job too; a job left running continues recording its own interval.
 3. Select **Clock in** when you return. A new shift starts with a new timer; the earlier work period remains in history.
 
 Repeat for additional breaks. For example, working 08:00-10:00, 10:15-12:00, and 12:45-17:00 records **8h 00m**, not the full nine-hour span. The 15- and 45-minute gaps are excluded. History shows three separate shifts, even on the same date; totals sum only saved work-period durations.
@@ -139,7 +139,7 @@ php apps/timesheets/tests/upgrade.php /path/to/nextcloud verify /private/upgrade
 php apps/timesheets/tests/upgrade.php /path/to/nextcloud cleanup /private/upgrade-state.json
 ```
 
-The test temporarily changes global tracking and combined-mode preferences to non-default values, enables restricted access with an explicit user grant, and creates a test account with shift/job history and active intervals. Run it when other testing users are idle. It verifies saved settings/assignments and shift fields, administration/dashboard data, continued elapsed time, and clock-out across the upgrade in separate PHP processes. **Always run cleanup, even if deployment or verification fails**, to restore the original tracking/access settings and remove the test account/shifts. Keep the state file until cleanup succeeds. Verification requires a genuinely newer installed app version, not just another request on the same release. Adjust `apps` for `custom_apps`.
+The test temporarily changes global tracking and combined-mode preferences to non-default values, enables restricted access with an explicit user grant, and creates a test account with shift/job history and active intervals. Run it when other testing users are idle. It verifies saved settings/assignments and shift/job fields, administration/dashboard data, continued elapsed time, and clock-out across the upgrade in separate PHP processes. **Always run cleanup, even if deployment or verification fails**, to restore the original tracking/access/interaction settings and remove the test account and intervals. Keep the state file until cleanup succeeds. Verification requires a genuinely newer installed app version, not just another request on the same release. Adjust `apps` for `custom_apps`.
 
 ### Database migrations and persistence checks
 

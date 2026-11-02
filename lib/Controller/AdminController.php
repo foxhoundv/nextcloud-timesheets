@@ -8,12 +8,14 @@ use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
 use OCP\IRequest;
+use OCP\IL10N;
 
 class AdminController extends Controller {
     public function __construct(
         string $appName,
         IRequest $request,
         private IConfig $config,
+        private IL10N $l,
     ) {
         parent::__construct($appName, $request);
     }
@@ -29,7 +31,7 @@ class AdminController extends Controller {
     ): JSONResponse {
         if (($job_require_shift !== null && !in_array($job_require_shift, ['0', '1'], true))
             || ($shift_end_job_policy !== null && !in_array($shift_end_job_policy, ['block', 'allow'], true))) {
-            return new JSONResponse(['message' => 'Choose valid shift/job interaction settings.'], 400);
+            return new JSONResponse(['message' => $this->l->t('Choose valid shift/job interaction settings.')], 400);
         }
         $allowedRounding = ['5', '10', '15', '30'];
 

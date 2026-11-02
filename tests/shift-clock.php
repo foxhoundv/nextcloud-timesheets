@@ -187,9 +187,11 @@ try {
     if (!$user->delete()) {
         throw new RuntimeException('Failed to remove clock test account');
     }
-    $cleanup = $db->getQueryBuilder();
-    $cleanup->delete('timesheets_clock_locks')
-        ->where($cleanup->expr()->eq('user_id', $cleanup->createNamedParameter($testUserId)));
-    $cleanup->executeStatement();
+    foreach ([$testUserId, $testUserId . '-other'] as $lockId) {
+        $cleanup = $db->getQueryBuilder();
+        $cleanup->delete('timesheets_clock_locks')
+            ->where($cleanup->expr()->eq('user_id', $cleanup->createNamedParameter($lockId)));
+        $cleanup->executeStatement();
+    }
 }
 echo "Shift clock checks passed; test shifts and account removed, tracking setting restored.\n";

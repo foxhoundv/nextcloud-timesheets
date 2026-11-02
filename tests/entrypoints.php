@@ -324,6 +324,10 @@ try {
     foreach ($payload as $key => $value) {
         check(($storedValues[$key] ?? null) === $value, 'Saved setting persists: ' . $key);
     }
+    check(request('/index.php/apps/timesheets/settings', ['shift_end_job_policy' => 'auto-close'], $token)['status'] === 400,
+        'Unknown shift/job policy is explicitly rejected');
+    check(request('/index.php/apps/timesheets/settings', ['job_require_shift' => 'invalid'], $token)['status'] === 400,
+        'Invalid shift requirement is explicitly rejected');
     $jobInPath = '/index.php/apps/timesheets/api/v1/jobs/clock-in';
     $jobOutPath = '/index.php/apps/timesheets/api/v1/jobs/clock-out';
     $adminGroup->removeUser($user);

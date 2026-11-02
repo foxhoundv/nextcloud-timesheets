@@ -116,7 +116,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
     <h2><?php p($l->t('User and group access')); ?></h2>
     <p class="timesheets-intro"><?php p($l->t('By default, everyone with Nextcloud app access can use enabled tracking features. Restricted mode limits new activity to assigned users and groups. It does not override Nextcloud app-level restrictions.')); ?></p>
     <p class="timesheets-intro"><?php p($l->t('Assignments combine: a user receives each permission granted directly or by any group. An assignment without tracking permissions grants dashboard access only. Global tracking switches above still apply. Shift and job permissions can be granted independently.')); ?></p>
-    <p class="timesheets-intro"><?php p($l->t('After access is removed, users can still view their own saved history and finish an open shift, but cannot start new shifts. Nextcloud administrators always manage these settings; assignments do not grant administration rights.')); ?></p>
+    <p class="timesheets-intro"><?php p($l->t('After access is removed, users can still view their own saved shift/job history and finish active intervals, but cannot start new shifts or jobs. Nextcloud administrators always manage these settings; assignments do not grant administration rights.')); ?></p>
     <form id="timesheets-access-form" method="post" action="<?php p($_['accessSaveUrl']); ?>">
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">

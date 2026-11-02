@@ -36,6 +36,20 @@ if (PHP_SAPI === 'cli' && ($argv[2] ?? '') === 'worker') {
 }
 
 require __DIR__ . '/persistence.php';
+$migration = new \OCA\Timesheets\Migration\Version000112Date20261102210000();
+$migration->changeSchema($output, $schemaClosure, []);
+$jobTable = $schema->getWrappedSchema()->getTable($connection->getPrefix() . 'timesheets_jobs');
+check($jobTable->getIndex('ts_jobs_open_user')->isUnique()
+    && !$jobTable->getColumn('open_user_id')->getNotnull(), 'Job migration permits many closed rows but only one open slot per user');
+check($jobTable->hasColumn('duration_seconds') && $jobTable->hasColumn('time_zone')
+    && $jobTable->getColumn('job_reference')->getLength() === 255, 'Job migration retains precise duration, timezone, and bounded references');
+$query = $db->getQueryBuilder();
+$query->select('version')->from('migrations')
+    ->where($query->expr()->eq('app', $query->createNamedParameter('timesheets')))
+    ->andWhere($query->expr()->eq('version', $query->createNamedParameter('000112Date20261102210000')));
+$result = $query->executeQuery();
+check($result->fetchOne() !== false, 'Nextcloud recorded the job migration');
+$result->closeCursor();
 $config = Server::get(IConfig::class);
 $previous = [];
 foreach (['shift_tracking', 'job_tracking', 'job_require_shift', 'shift_end_job_policy', 'access_policy'] as $key) {
