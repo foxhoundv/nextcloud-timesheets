@@ -15,14 +15,10 @@ class ShiftService {
 
     public function listForUser(string $userId): array {
         if ($userId === '') {
-            return [];
+            throw new \InvalidArgumentException('A user ID is required to list shifts.');
         }
 
-        try {
-            return $this->shiftMapper->findByUser($userId);
-        } catch (\Throwable $e) {
-            return [];
-        }
+        return $this->shiftMapper->findByUser($userId);
     }
 
     public function createShift(Shift $shift): Shift {
