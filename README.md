@@ -13,6 +13,8 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 
 - Administrators grant app access to individual Nextcloud users and groups, assign admin rights, configure storage roots, and set global rounding and shift-length rules.
 - Per employee, administrators enable shift tracking, job tracking, or both.
+- Planned tracking-preference guidance: the administration page must explain that shift tracking and job tracking can each operate independently. Enabling both must reveal additional settings governing their interaction.
+- Planned combined-tracking policy: administrators choose whether a shift may end while a job is still active. If disallowed, users must clock out of the job before clocking out of the shift, with a clear explanation when blocked. If allowed, shift clock-out must be permitted with an active job. The default policy and what happens to the active job in that case remain to be decided before implementation.
 - Shift and job rounding can be enabled independently. The administrator selects 5, 10, 15, or 30 minutes for each enabled rule.
 - A configurable net-shift threshold triggers a confirmation after clock-out. Breaks are outside the shift and excluded from net shift duration.
 - Shift intervals crossing midnight are attributed to their start date. Their duration remains the full elapsed interval.
