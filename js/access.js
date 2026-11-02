@@ -34,6 +34,12 @@
         }
         type.addEventListener('change', clearResults);
         query.addEventListener('input', clearResults);
+        query.addEventListener('keydown', function(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                searchButton.click();
+            }
+        });
         searchButton.addEventListener('click', async function() {
             if (searching || saving) {
                 return;

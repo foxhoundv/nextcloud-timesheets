@@ -20,7 +20,7 @@ $settings = $_['settings'];
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">
                 <label for="shift_tracking"><?php p($l->t('Enable shift tracking')); ?></label>
-                <p id="shift_tracking_help"><?php p($l->t('Allow users with app access to clock in and out. Disabling this prevents new shifts; users can still clock out of a shift that is already open. Time is saved to the second; totals display completed whole minutes without rounding.')); ?></p>
+                <p id="shift_tracking_help"><?php p($l->t('Allow users with app access and shift permission to clock in and out. Restricted mode below controls individual and group permissions. Disabling this prevents new shifts; users can still clock out of a shift that is already open. Time is saved to the second; totals display completed whole minutes without rounding.')); ?></p>
             </div>
             <input type="checkbox" id="shift_tracking" name="shift_tracking" value="1" aria-describedby="shift_tracking_help" <?php echo !empty($settings['shift_tracking']) ? 'checked' : ''; ?>>
         </div>

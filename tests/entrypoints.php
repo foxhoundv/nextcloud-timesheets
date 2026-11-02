@@ -404,4 +404,6 @@ foreach ($originalValues as $key => $value) {
         'Original setting restored: ' . $key);
 }
 check(!$userManager->userExists($userId), 'Temporary test account was deleted');
+check($config->getAppValue('timesheets', 'access_policy', '') === $previousAccess,
+    'Original access policy restored');
 echo "Entry point checks passed; temporary account and cookies removed, original settings restored.\n";

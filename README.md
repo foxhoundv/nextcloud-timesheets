@@ -73,7 +73,7 @@ On the testing server, run `php apps/timesheets/tests/access.php /path/to/nextcl
 ### Clocking in and out
 
 1. An administrator enables **Enable shift tracking** and saves the settings.
-2. A signed-in user with app access selects **Clock in** on the dashboard.
+2. A signed-in user with app access (and shift permission in restricted mode) selects **Clock in** on the dashboard.
 3. The current shift shows its start time and elapsed time. Select **Clock out** to save the completed duration and refresh the overview/history.
 
 Only one shift can be open per user, enforced by a database unique index. Clock-out updates only the authenticated user's specific open shift; stale tabs and duplicate requests cannot close a newer shift or overwrite a completed duration. If a request cannot be confirmed, refresh before retrying. An already-open shift can still be finished after an administrator disables tracking.
@@ -99,8 +99,8 @@ Deploy new app files in place and run `php occ upgrade`; do not uninstall the ap
 To regression-test an actual version upgrade **on the testing server only**, use the same private state-file path and web-server user for all phases:
 
 ```sh
-# Before deploying the newer app, copy its tests/upgrade.php to a temporary path.
-php /tmp/timesheets-upgrade.php /path/to/nextcloud prepare /private/upgrade-state.json
+# Before deploying the newer app, prepare with the currently installed test.
+php apps/timesheets/tests/upgrade.php /path/to/nextcloud prepare /private/upgrade-state.json
 # Deploy the newer app, then run its upgrade.
 php occ upgrade
 # Refresh the testing instance's web-process cache if necessary.
@@ -108,7 +108,7 @@ php apps/timesheets/tests/upgrade.php /path/to/nextcloud verify /private/upgrade
 php apps/timesheets/tests/upgrade.php /path/to/nextcloud cleanup /private/upgrade-state.json
 ```
 
-The test temporarily changes all five global administration preferences to non-default values and creates a test account with history and an open shift. Run it when other testing users are idle. It verifies saved fields, administration/dashboard data, continued elapsed time, and clock-out across the upgrade in separate PHP processes. **Always run cleanup, even if deployment or verification fails**, to restore the original settings and remove the test account/shifts. Keep the state file until cleanup succeeds. Verification requires a genuinely newer installed app version, not just another request on the same release. Adjust `apps` for `custom_apps`.
+The test temporarily changes all five global tracking preferences to non-default values, enables restricted access with an explicit user grant, and creates a test account with history and an open shift. Run it when other testing users are idle. It verifies saved settings/assignments and shift fields, administration/dashboard data, continued elapsed time, and clock-out across the upgrade in separate PHP processes. **Always run cleanup, even if deployment or verification fails**, to restore the original tracking/access settings and remove the test account/shifts. Keep the state file until cleanup succeeds. Verification requires a genuinely newer installed app version, not just another request on the same release. Adjust `apps` for `custom_apps`.
 
 ### Database migrations and persistence checks
 

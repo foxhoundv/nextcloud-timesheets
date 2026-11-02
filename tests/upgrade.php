@@ -109,7 +109,10 @@ if ($phase === 'prepare') {
     foreach ($preferences as $key => $value) {
         $config->setAppValue('timesheets', $key, $value);
     }
-    $config->setAppValue('timesheets', 'access_policy', '{"restricted":false,"grants":[]}');
+    $state['accessPolicy'] = json_encode(['restricted' => true, 'grants' => [
+        ['type' => 'user', 'id' => $state['userId'], 'shift' => true, 'job' => true],
+    ]], JSON_THROW_ON_ERROR);
+    $access->save($state['accessPolicy']);
     $config->setUserValue($state['userId'], 'core', 'timezone', 'America/Los_Angeles');
     $history = new Shift();
     $history->setUserId($state['userId']);
@@ -171,6 +174,10 @@ if ($phase === 'cleanup') {
 
 check(version_compare($config->getAppValue('timesheets', 'installed_version'), $state['version'], '>'),
     'Verification runs after an actual app version upgrade');
+if (isset($state['accessPolicy'])) {
+    check($config->getAppValue('timesheets', 'access_policy') === $state['accessPolicy'],
+        'Restricted access mode and tracking assignments survive upgrade');
+}
 foreach ($preferences as $key => $value) {
     check($config->getAppValue('timesheets', $key) === $value, 'Non-default setting survives upgrade: ' . $key);
 }

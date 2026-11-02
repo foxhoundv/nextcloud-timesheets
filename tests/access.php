@@ -91,6 +91,13 @@ try {
     check(!$access->permissions($id)['shift'] && $access->permissions($id)['job'],
         'Removing group membership removes only that group permission');
     $group->addUser($user);
+    $config->setAppValue('timesheets', 'shift_tracking', '0');
+    try {
+        $clock->clockIn($id);
+        throw new LogicException('A grant bypassed the global tracking switch');
+    } catch (DomainException $error) {
+        check($error->getCode() === 403, 'Tracking grants cannot bypass the global master switch');
+    }
     $config->setAppValue('timesheets', 'shift_tracking', '1');
     $shift = $clock->clockIn($id);
     savePolicy(true, []);
