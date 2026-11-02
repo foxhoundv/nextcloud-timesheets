@@ -203,9 +203,9 @@ try {
     $clockInPath = '/index.php/apps/timesheets/api/v1/shifts/clock-in';
     $clockOutPath = '/index.php/apps/timesheets/api/v1/shifts/clock-out';
     $denied = request($clockInPath, []);
-    check($denied['status'] === 412, 'Clock-in requires a CSRF token');
+    check($denied['status'] === 412, 'Clock-in requires a CSRF token (HTTP ' . $denied['status'] . ')');
     $started = request($clockInPath, ['userId' => 'someone-else', 'clockIn' => '2000-01-01'], $token);
-    check($started['status'] === 200, 'Regular account can clock in with tracking enabled');
+    check($started['status'] === 200, 'Regular account can clock in with tracking enabled (HTTP ' . $started['status'] . ')');
     $active = $shiftMapper->findOpenForUser($userId);
     check($active !== null && $active->getUserId() === $userId
         && str_starts_with($active->getClockIn(), gmdate('Y-m-d')),
