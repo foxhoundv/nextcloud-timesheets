@@ -24,4 +24,27 @@ class ShiftMapper extends QBMapper {
 
         return $this->findEntities($qb);
     }
+
+    public function findOpenForUser(string $userId): ?Shift {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')->from($this->getTableName())
+            ->where($qb->expr()->eq('open_user_id', $qb->createNamedParameter($userId)));
+        $shifts = $this->findEntities($qb);
+        return $shifts[0] ?? null;
+    }
+
+    public function closeShift(Shift $shift, string $clockOut, int $seconds): bool {
+        $qb = $this->db->getQueryBuilder();
+        $qb->update($this->getTableName())
+            ->set('clock_out', $qb->createNamedParameter($clockOut))
+            ->set('duration_seconds', $qb->createNamedParameter($seconds, IQueryBuilder::PARAM_INT))
+            ->set('duration_minutes', $qb->createNamedParameter(intdiv($seconds, 60), IQueryBuilder::PARAM_INT))
+            ->set('status', $qb->createNamedParameter('closed'))
+            ->set('open_user_id', $qb->createNamedParameter(null, IQueryBuilder::PARAM_NULL))
+            ->where($qb->expr()->eq('id', $qb->createNamedParameter($shift->getId(), IQueryBuilder::PARAM_INT)))
+            ->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($shift->getUserId())))
+            ->andWhere($qb->expr()->eq('open_user_id', $qb->createNamedParameter($shift->getUserId())))
+            ->andWhere($qb->expr()->eq('status', $qb->createNamedParameter('open')));
+        return $qb->executeStatement() === 1;
+    }
 }

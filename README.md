@@ -48,11 +48,27 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 
 To check both entry points over HTTP, run `php apps/timesheets/tests/entrypoints.php /path/to/nextcloud https://testing-instance` on the testing server as its web-server user. Adjust the app path for `custom_apps`. This test creates a temporary account, checks regular-user access, briefly promotes it for admin-only checks, tests saving and CSRF protection, restores the original settings, and deletes the account and cookies. Use only the testing instance; its HTTPS certificate must be trusted by PHP/cURL.
 
-The **Timesheet Administration** form groups tracking, rounding, and shift-review preferences with descriptions for every control. These preferences are saved, but their recording workflows are still in development.
+The **Timesheet Administration** form groups tracking, rounding, and shift-review preferences with descriptions for every control. **Enable shift tracking** controls new clock-ins. Job tracking, breaks, rounding, and long-shift confirmations are still in development; their preferences are saved but not yet applied.
 
-The dashboard shows all-date recorded duration for completed shifts, completed/open shift counts, and shift history. Durations use hours and minutes (for example, `2h 05m`), not decimal hours. Open shifts have no finalized duration. Empty history is shown as an empty state, not a sample shift. Clock-in/out is not yet available; the page explains this instead of displaying an inactive action or placeholder job/shop totals.
+The dashboard shows your current shift, a live elapsed-time estimate, all-date recorded duration for completed shifts, completed/open shift counts, and shift history. Durations use hours and minutes (for example, `2h 05m`), not decimal hours. Open shifts have no finalized duration. Empty history is shown as an empty state, not a sample shift.
 
 Both pages use paired Nextcloud background and text colors, with text labels rather than color alone for statuses. Settings controls align in two columns on wide screens and stack on narrow screens.
+
+### Clocking in and out
+
+1. An administrator enables **Enable shift tracking** and saves the settings.
+2. A signed-in user with app access selects **Clock in** on the dashboard.
+3. The current shift shows its start time and elapsed time. Select **Clock out** to save the completed duration and refresh the overview/history.
+
+Only one shift can be open per user, enforced by a database unique index. Clock-out updates only the authenticated user's specific open shift; stale tabs and duplicate requests cannot close a newer shift or overwrite a completed duration. If a request cannot be confirmed, refresh before retrying. An already-open shift can still be finished after an administrator disables tracking.
+
+Both POST endpoints (`/api/v1/shifts/clock-in` and `/api/v1/shifts/clock-out`, relative to the app URL) require authentication and a Nextcloud CSRF token. Identity and timestamps come from the server, not submitted fields; clock-out requires the `shiftId` displayed in the dashboard form.
+
+Clock timestamps are UTC. A shift retains the user's Nextcloud time-zone preference at clock-in and is attributed to that local start date, including across midnight and daylight-saving changes. Open timestamps use that saved zone; completed timestamps display in the user's current Nextcloud zone. Elapsed duration is stored in seconds; displayed completed totals use each shift's whole minutes without rounding. The browser timer is an estimate only; the server computes the saved duration. Breaks are not yet tracked, so the entire interval counts as work time.
+
+Version 0.1.6 adds the unique open-shift slot, saved timezone, and precise duration fields. Legacy timestamps are treated as UTC because the old schema did not store their timezone. Existing closed records are unchanged. If duplicate open shifts exist, the upgrade stops with an explicit error rather than discarding records; resolve those duplicates before retrying.
+
+On the testing server, run `php apps/timesheets/tests/shift-clock.php /path/to/nextcloud` for database-backed clock transition, stale-request, cross-midnight, and daylight-saving regression checks. Adjust for `custom_apps`. The test restores the tracking setting and deletes its temporary account and shifts. The existing entry-point suite also tests HTTP clock actions and CSRF enforcement.
 
 ### Database migrations and persistence checks
 
@@ -80,7 +96,7 @@ The existing `.gitignore` rules exclude `.env` from Git. Keep real credentials o
 
 ## Development status
 
-This repository contains the initial app shell and migration-managed shift persistence. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Access controls, clock flows, storage integration, printable views, and workbook generation are planned next.
+This repository contains migration-managed shift persistence and clock-in/out with actual elapsed time. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Per-user/group access controls, breaks, rounding, confirmations, job tracking, storage integration, printable views, and workbook generation are planned next.
 
 ## Longer-term direction
 

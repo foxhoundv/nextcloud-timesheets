@@ -13,8 +13,12 @@ class Shift extends Entity {
     protected $clockOut;
     protected $durationMinutes;
     protected $status;
+    protected $openUserId;
+    protected $timeZone;
+    protected $durationSeconds;
 
     public function __construct() {
         $this->addType('durationMinutes', 'integer');
+        $this->addType('durationSeconds', 'integer');
     }
 }

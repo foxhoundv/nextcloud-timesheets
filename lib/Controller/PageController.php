@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace OCA\Timesheets\Controller;
 
 use OCA\Timesheets\Service\ShiftService;
+use OCA\Timesheets\Service\ShiftClockService;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IRequest;
 use OCP\IUserSession;
+use OCP\IURLGenerator;
 
 class PageController extends Controller {
     public function __construct(
@@ -18,6 +20,8 @@ class PageController extends Controller {
         IRequest $request,
         private ShiftService $shiftService,
         private IUserSession $userSession,
+        private ShiftClockService $clock,
+        private IURLGenerator $urlGenerator,
     ) {
         parent::__construct($appName, $request);
     }
@@ -31,11 +35,15 @@ class PageController extends Controller {
         $shifts = $this->shiftService->listForUser($userId);
         $stats = $this->buildStats($shifts);
 
-        $entries = $this->buildEntries($shifts);
+        $entries = $this->buildEntries($shifts, $userId);
 
         return new TemplateResponse('timesheets', 'main', [
             'stats' => $stats,
             'entries' => $entries,
+            'trackingEnabled' => $this->clock->isEnabled(),
+            'activeShift' => $this->clock->current($userId),
+            'clockInUrl' => $this->urlGenerator->linkToRoute('timesheets.shift.clockIn'),
+            'clockOutUrl' => $this->urlGenerator->linkToRoute('timesheets.shift.clockOut'),
         ]);
     }
 
@@ -63,18 +71,24 @@ class PageController extends Controller {
         ];
     }
 
-    private function buildEntries(array $shifts): array {
+    private function buildEntries(array $shifts, string $userId): array {
         $entries = [];
+        $userZone = $this->clock->userTimeZone($userId);
 
         foreach ($shifts as $shift) {
             $status = (string) ($shift->getStatus() ?? 'closed');
             $durationMinutes = (int) ($shift->getDurationMinutes() ?? 0);
+            $zone = $status === 'open' ? new \DateTimeZone($shift->getTimeZone() ?? 'UTC') : $userZone;
+            $clockIn = $shift->getClockIn() === null ? null : $this->clock->parseTimestamp($shift->getClockIn())->setTimezone($zone);
+            $clockOut = $shift->getClockOut() === null ? null : $this->clock->parseTimestamp($shift->getClockOut())->setTimezone($zone);
 
             $entries[] = [
                 'date' => (string) ($shift->getShiftDate() ?? '—'),
                 'total' => $status === 'open' ? null : $this->formatMinutes($durationMinutes),
                 'status' => $status === 'open' ? 'In progress' : 'Closed',
                 'isOpen' => $status === 'open',
+                'clockIn' => $clockIn?->format('Y-m-d H:i:s T'),
+                'clockOut' => $clockOut?->format('Y-m-d H:i:s T'),
             ];
         }
 

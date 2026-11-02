@@ -124,6 +124,24 @@
     overflow-x: auto;
 }
 
+#timesheets .timesheets-elapsed {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    margin: 12px 0;
+}
+
+#timesheets #timesheets-clock-form {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 16px;
+    margin: 16px 0;
+}
+
+#timesheets .timesheets-clock-help {
+    margin-top: 16px;
+}
+
 #timesheets table {
     width: 100%;
     border-collapse: collapse;

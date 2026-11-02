@@ -157,9 +157,9 @@ try {
     check(str_contains($dashboard['body'], 'No shifts recorded yet')
         && !str_contains($dashboard['body'], 'Waiting for clock-ins'),
         'Empty dashboard explains the absence of records without a sample shift');
-    check(str_contains($dashboard['body'], 'Time recording is coming soon')
+    check(str_contains($dashboard['body'], 'Your current shift')
         && !str_contains($dashboard['body'], 'Quick summary'),
-        'Dashboard explains recording availability instead of showing placeholder settings');
+        'Dashboard shows current shift controls instead of placeholder settings');
     foreach ([
         ['2026-10-01', '2026-10-01 08:00:00', 'closed', 125],
         ['2026-10-02', '2026-10-02 08:00:00', 'open', 60],
@@ -198,6 +198,37 @@ try {
     $denied = request('/index.php/apps/timesheets/settings', [], $token);
     check($denied['status'] === 403, 'Regular account cannot save administration settings');
 
+    $settingsSaved = true;
+    $config->setAppValue('timesheets', 'shift_tracking', '1');
+    $clockInPath = '/index.php/apps/timesheets/api/v1/shifts/clock-in';
+    $clockOutPath = '/index.php/apps/timesheets/api/v1/shifts/clock-out';
+    $denied = request($clockInPath, []);
+    check($denied['status'] === 412, 'Clock-in requires a CSRF token');
+    $started = request($clockInPath, ['userId' => 'someone-else', 'clockIn' => '2000-01-01'], $token);
+    check($started['status'] === 200, 'Regular account can clock in with tracking enabled');
+    $active = $shiftMapper->findOpenForUser($userId);
+    check($active !== null && $active->getUserId() === $userId
+        && str_starts_with($active->getClockIn(), gmdate('Y-m-d')),
+        'Clock-in uses the authenticated account and server time, not submitted values');
+    $testShifts[] = $active;
+    $duplicate = request($clockInPath, [], $token);
+    check($duplicate['status'] === 409, 'Duplicate clock-in is rejected');
+    $running = request('/index.php/apps/timesheets/');
+    check($running['status'] === 200 && str_contains($running['body'], 'id="timesheets-elapsed"')
+        && str_contains($running['body'], 'name="shiftId"'), 'Dashboard shows the active shift and clock-out form');
+    $denied = request($clockOutPath, ['shiftId' => $active->getId()]);
+    check($denied['status'] === 412, 'Clock-out requires a CSRF token');
+    $stale = request($clockOutPath, ['shiftId' => $active->getId() + 1], $token);
+    check($stale['status'] === 409, 'Clock-out rejects another or stale shift ID');
+    $config->setAppValue('timesheets', 'shift_tracking', '0');
+    $denied = request($clockInPath, [], $token);
+    check($denied['status'] === 403, 'Disabled tracking rejects new clock-ins on the server');
+    $stopped = request($clockOutPath, ['shiftId' => $active->getId()], $token);
+    check($stopped['status'] === 200 && $shiftMapper->findOpenForUser($userId) === null,
+        'Existing shifts can be clocked out even after tracking is disabled');
+    $duplicate = request($clockOutPath, ['shiftId' => $active->getId()], $token);
+    check($duplicate['status'] === 409, 'Duplicate clock-out is rejected');
+
     $adminGroup->addUser($user);
     check($groupManager->isAdmin($userId), 'Temporary account is promoted for admin-only checks');
     $admin = request('/index.php/settings/admin/timesheets');
@@ -229,7 +260,6 @@ try {
     ];
     $denied = request('/index.php/apps/timesheets/settings', $payload);
     check($denied['status'] === 412, 'Settings save rejects requests without a CSRF token');
-    $settingsSaved = true;
     $saved = request('/index.php/apps/timesheets/settings', $payload, $token);
     $data = json_decode($saved['body'], true, 512, JSON_THROW_ON_ERROR);
     check($saved['status'] === 200 && ($data['status'] ?? '') === 'ok',

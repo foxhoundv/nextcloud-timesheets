@@ -10,7 +10,7 @@ $settings = $_['settings'];
 <div id="timesheets-admin" class="section">
     <h2><?php p($l->t('Timesheet Administration')); ?></h2>
     <p class="timesheets-intro"><?php p($l->t('Configure tracking preferences and time-recording rules for your organization.')); ?></p>
-    <p class="timesheets-notice"><?php p($l->t('These preferences can be saved now. Clock-in/out, job tracking, rounding, and shift confirmations are still in development and are not yet applied to recorded time.')); ?></p>
+    <p class="timesheets-notice"><?php p($l->t('Shift tracking enables clock-in/out with actual elapsed time. Job tracking, breaks, rounding, and shift confirmations are still in development; their preferences are saved but not yet applied.')); ?></p>
 
     <form id="timesheets-admin-form" method="post" action="<?php p($_['saveUrl']); ?>">
         <fieldset>
@@ -18,7 +18,7 @@ $settings = $_['settings'];
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">
                 <label for="shift_tracking"><?php p($l->t('Enable shift tracking')); ?></label>
-                <p id="shift_tracking_help"><?php p($l->t('Record when employees start and finish a work shift. Shift time will provide the basis for attendance and total work hours.')); ?></p>
+                <p id="shift_tracking_help"><?php p($l->t('Allow users with app access to clock in and out. Disabling this prevents new shifts; users can still clock out of a shift that is already open. Time is saved to the second; totals display completed whole minutes without rounding.')); ?></p>
             </div>
             <input type="checkbox" id="shift_tracking" name="shift_tracking" value="1" aria-describedby="shift_tracking_help" <?php echo !empty($settings['shift_tracking']) ? 'checked' : ''; ?>>
         </div>
