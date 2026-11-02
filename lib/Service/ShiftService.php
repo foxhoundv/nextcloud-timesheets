@@ -14,7 +14,15 @@ class ShiftService {
     }
 
     public function listForUser(string $userId): array {
-        return $this->shiftMapper->findByUser($userId);
+        if ($userId === '') {
+            return [];
+        }
+
+        try {
+            return $this->shiftMapper->findByUser($userId);
+        } catch (\Throwable $e) {
+            return [];
+        }
     }
 
     public function createShift(Shift $shift): Shift {

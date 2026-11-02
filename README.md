@@ -38,6 +38,12 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
    `php -l lib/Settings/AdminSettings.php`
 6. Commit changes with descriptive messages and push to GitHub when ready.
 
+### Local testing credentials
+
+Copy [.env.example](.env.example) to `.env` if it does not already exist, then fill in the testing instance URL, username, app password, and SSH connection details. Prefer a dedicated test account and SSH key authentication; store only the private key's local path, not its contents.
+
+The existing `.gitignore` rules exclude `.env` from Git. Keep real credentials only in that local file, never in the example template. Git ignore rules are not encryption: protect the file locally and do not share it. These values are for local testing/deployment tooling and are not loaded automatically by the app.
+
 ## Development status
 
 This repository currently contains the initial app shell. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Database schema, access controls, clock flows, storage integration, printable views, and workbook generation are planned next.
