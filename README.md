@@ -48,13 +48,13 @@ After deploying the updated app to the testing server, run these commands from t
 
 ```sh
 php occ upgrade
-php occ migrations:status timesheets
+php occ config:app:get timesheets installed_version
 php apps/timesheets/tests/persistence.php /path/to/nextcloud
 ```
 
 Adjust the app path if it is installed in `custom_apps`. For Docker, execute these commands inside the testing instance's Nextcloud container as its web-server user, for example with `docker exec -u www-data <testing-container> ...`; PHP does not run on this development machine.
 
-The regression checks use Nextcloud's installed libraries, check migration creation and repeat execution in memory, verify service error propagation, and test real shift insert/read behavior in a rolled-back database transaction. Run them only against the testing instance after applying migrations. Database failures now reach Nextcloud's standard exception handling and logging instead of appearing as an empty dashboard.
+The regression checks use Nextcloud's installed libraries, verify that Nextcloud recorded the migration, check migration creation and repeat execution in memory, verify service error propagation, and test real shift insert/read behavior in a rolled-back database transaction. Run them only against the testing instance after applying migrations. The optional `occ migrations:status` command requires Nextcloud debug mode; these checks do not. Database failures now reach Nextcloud's standard exception handling and logging instead of appearing as an empty dashboard.
 
 The old request-time SQL could create an unprefixed `timesheets_shifts` table even when Nextcloud was configured to use a prefix. This migration neither deletes that table nor imports it automatically. If it contains historical data, back it up and inspect it before planning a separate data migration.
 

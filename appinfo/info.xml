@@ -4,7 +4,7 @@
   <name>Timesheets</name>
   <summary>Track employee shifts, job time, and shop time</summary>
   <description>Employee timesheets with Sales Order job tracking, printable views, and yearly workbooks.</description>
-  <version>0.1.3</version>
+  <version>0.1.4</version>
   <licence>agpl</licence>
   <author>foxhoundv</author>
   <namespace>Timesheets</namespace>
@@ -14,4 +14,16 @@
   <dependencies>
     <nextcloud min-version="34" />
   </dependencies>
+  <settings>
+    <admin>OCA\Timesheets\Settings\AdminSettings</admin>
+    <admin-section>OCA\Timesheets\Settings\AdminSection</admin-section>
+  </settings>
+  <navigations>
+    <navigation>
+      <name>Timesheets</name>
+      <route>timesheets.page.index</route>
+      <icon>app.svg</icon>
+      <order>80</order>
+    </navigation>
+  </navigations>
 </info>

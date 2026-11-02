@@ -2,12 +2,14 @@
 
 declare(strict_types=1);
 
+script('timesheets', 'admin');
+
 $settings = $_['settings'];
 ?>
 <div id="timesheets-admin" class="section">
     <h2>Timesheets administration</h2>
 
-    <form id="timesheets-admin-form" method="post">
+    <form id="timesheets-admin-form" method="post" action="<?php p(\OCP\Util::linkToRoute('timesheets.admin.save')); ?>">
         <div class="timesheets-admin-row">
             <label>
                 <input type="checkbox" name="shift_tracking" value="1" <?php echo !empty($settings['shift_tracking']) ? 'checked' : ''; ?>>
@@ -54,39 +56,3 @@ $settings = $_['settings'];
         <p id="timesheets-status" aria-live="polite"></p>
     </form>
 </div>
-
-<script>
-(function() {
-    const form = document.getElementById('timesheets-admin-form');
-    const status = document.getElementById('timesheets-status');
-
-    if (!form || !status) {
-        return;
-    }
-
-    form.addEventListener('submit', async function(event) {
-        event.preventDefault();
-
-        const payload = new URLSearchParams(new FormData(form));
-        const response = await fetch('<?php echo \OCP\Util::linkToRoute('timesheets.admin.save'); ?>', {
-            method: 'POST',
-            headers: {
-                'requesttoken': OC.requestToken,
-                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
-            },
-            body: payload.toString(),
-        });
-
-        const data = await response.json();
-
-        if (data && data.status === 'ok') {
-            status.textContent = 'Settings saved successfully.';
-            status.style.color = 'var(--color-success)';
-            return;
-        }
-
-        status.textContent = 'Unable to save settings.';
-        status.style.color = 'var(--color-error)';
-    });
-})();
-</script>

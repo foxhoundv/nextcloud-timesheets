@@ -3,12 +3,14 @@
 declare(strict_types=1);
 
 use Doctrine\DBAL\Schema\Schema;
+use OC\DB\Connection;
 use OC\DB\SchemaWrapper;
 use OCA\Timesheets\Db\Shift;
 use OCA\Timesheets\Db\ShiftMapper;
 use OCA\Timesheets\Migration\Version000103Date20261102170000;
 use OCA\Timesheets\Service\ShiftService;
 use OCP\AppFramework\Db\Entity;
+use OCP\DB\QueryBuilder\IQueryBuilder;
 use OCP\IDBConnection;
 use OCP\Migration\IOutput;
 use OCP\Server;
@@ -24,8 +26,12 @@ if (!is_file($nextcloudRoot . '/lib/base.php')) {
     exit(2);
 }
 
-define('OC_CONSOLE', true);
+define('OC_CONSOLE', 1);
 require_once $nextcloudRoot . '/lib/base.php';
+set_exception_handler(static function (Throwable $error): void {
+    fwrite(STDERR, get_class($error) . ': ' . $error->getMessage() . "\n");
+    exit(1);
+});
 require_once __DIR__ . '/../lib/Db/Shift.php';
 require_once __DIR__ . '/../lib/Db/ShiftMapper.php';
 require_once __DIR__ . '/../lib/Service/ShiftService.php';
@@ -40,7 +46,16 @@ function check(bool $condition, string $message): void {
 }
 
 $db = Server::get(IDBConnection::class);
-$schema = new SchemaWrapper($db, new Schema());
+$query = $db->getQueryBuilder();
+$query->select('version')
+    ->from('migrations')
+    ->where($query->expr()->eq('app', $query->createNamedParameter('timesheets', IQueryBuilder::PARAM_STR)));
+$result = $query->executeQuery();
+$versions = $result->fetchFirstColumn();
+$result->closeCursor();
+check(in_array('000103Date20261102170000', $versions, true), 'Nextcloud recorded the initial migration');
+$connection = Server::get(Connection::class);
+$schema = new SchemaWrapper($connection, new Schema());
 $output = new class implements IOutput {
     public function debug(string $message): void {}
     public function info($message) {}
@@ -52,7 +67,7 @@ $output = new class implements IOutput {
 $migration = new Version000103Date20261102170000();
 $schemaClosure = static fn () => $schema;
 check($migration->changeSchema($output, $schemaClosure, []) === $schema, 'Migration creates a new schema');
-$table = $schema->getWrappedSchema()->getTable($db->getPrefix() . 'timesheets_shifts');
+$table = $schema->getWrappedSchema()->getTable($connection->getPrefix() . 'timesheets_shifts');
 check(array_keys($table->getColumns()) === [
     'id', 'user_id', 'shift_date', 'clock_in', 'clock_out', 'duration_minutes', 'status',
 ], 'Migration creates all shift columns using the configured table prefix');

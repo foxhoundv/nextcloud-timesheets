@@ -6,6 +6,8 @@ namespace OCA\Timesheets\Controller;
 
 use OCA\Timesheets\Service\ShiftService;
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
+use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IRequest;
 use OCP\IUserSession;
@@ -20,6 +22,8 @@ class PageController extends Controller {
         parent::__construct($appName, $request);
     }
 
+    #[NoAdminRequired]
+    #[NoCSRFRequired]
     public function index(): TemplateResponse {
         $user = $this->userSession->getUser();
         $userId = $user ? $user->getUID() : '';
