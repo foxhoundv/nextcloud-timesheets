@@ -70,6 +70,8 @@ Version 0.1.6 adds the unique open-shift slot, saved timezone, and precise durat
 
 On the testing server, run `php apps/timesheets/tests/shift-clock.php /path/to/nextcloud` for database-backed clock transition, stale-request, cross-midnight, and daylight-saving regression checks. Adjust for `custom_apps`. The test restores the tracking setting and deletes its temporary account and shifts. The existing entry-point suite also tests HTTP clock actions and CSRF enforcement.
 
+After deploying new routes and running `occ upgrade`, verify the web endpoints as well as CLI checks. If the web process still has an old APCu route list, refresh that testing instance's PHP/web process cache (or restart its container) and verify the login page is HTTP-ready before testing; a successful CLI upgrade alone does not clear a web worker's APCu cache.
+
 ### Database migrations and persistence checks
 
 Shift tables are created by Nextcloud migrations during installation or upgrade, never during page requests. Version 0.1.3 introduces the initial migration and leaves an existing, correctly prefixed shift table unchanged. Nextcloud applies its configured database table prefix automatically.

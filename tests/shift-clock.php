@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use OCA\Timesheets\Db\ShiftMapper;
+use OCA\Timesheets\Db\Shift;
+use OCA\Timesheets\Migration\Version000106Date20261102190000;
 use OCA\Timesheets\Service\ShiftClockService;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IAppConfig;
@@ -102,6 +104,24 @@ try {
     check(!$mapper->closeShift($next, '2026-11-01 11:30:00', 10800),
         'Conditional update prevents a concurrent or repeated close from overwriting duration');
     check($service->current($testUserId) === null, 'No active shift remains after clock-out');
+
+    $migration = new Version000106Date20261102190000($db);
+    $migration->preSchemaChange($output, $schemaClosure, []);
+    check(true, 'Clock migration accepts users without duplicate open shifts');
+    foreach ([1, 2] as $number) {
+        $legacy = new Shift();
+        $legacy->setUserId($testUserId);
+        $legacy->setStatus('open');
+        $legacy->setClockIn('2026-10-01 08:00:00');
+        $saved[] = $mapper->insert($legacy);
+    }
+    try {
+        $migration->preSchemaChange($output, $schemaClosure, []);
+        throw new LogicException('Duplicate legacy open shifts were accepted');
+    } catch (RuntimeException $error) {
+        check(str_contains($error->getMessage(), 'multiple open shifts'),
+            'Clock migration rejects duplicate legacy open shifts rather than discarding records');
+    }
 } finally {
     foreach ($saved as $entry) {
         $mapper->delete($entry);

@@ -139,6 +139,23 @@ function pageDocument(string $body): DOMDocument {
     return $document;
 }
 
+function setTrackingOverHttp(bool $enabled, string $token): void {
+    global $adminGroup, $user, $originalValues;
+    $adminGroup->addUser($user);
+    try {
+        $response = request('/index.php/apps/timesheets/settings', [
+            'shift_tracking' => $enabled ? '1' : '0',
+            'job_tracking' => $originalValues['job_tracking'] ?? '0',
+            'shift_rounding' => $originalValues['shift_rounding'] ?? '15',
+            'job_rounding' => $originalValues['job_rounding'] ?? '15',
+            'net_shift_threshold' => $originalValues['net_shift_threshold'] ?? '0',
+        ], $token);
+        check($response['status'] === 200, 'Tracking test preference saved through the web application');
+    } finally {
+        $adminGroup->removeUser($user);
+    }
+}
+
 $shiftMapper = new ShiftMapper(Server::get(IDBConnection::class));
 $testShifts = [];
 try {
@@ -199,7 +216,7 @@ try {
     check($denied['status'] === 403, 'Regular account cannot save administration settings');
 
     $settingsSaved = true;
-    $config->setAppValue('timesheets', 'shift_tracking', '1');
+    setTrackingOverHttp(true, $token);
     $clockInPath = '/index.php/apps/timesheets/api/v1/shifts/clock-in';
     $clockOutPath = '/index.php/apps/timesheets/api/v1/shifts/clock-out';
     $denied = request($clockInPath, []);
@@ -220,7 +237,7 @@ try {
     check($denied['status'] === 412, 'Clock-out requires a CSRF token');
     $stale = request($clockOutPath, ['shiftId' => $active->getId() + 1], $token);
     check($stale['status'] === 409, 'Clock-out rejects another or stale shift ID');
-    $config->setAppValue('timesheets', 'shift_tracking', '0');
+    setTrackingOverHttp(false, $token);
     $denied = request($clockInPath, [], $token);
     check($denied['status'] === 403, 'Disabled tracking rejects new clock-ins on the server');
     $stopped = request($clockOutPath, ['shiftId' => $active->getId()], $token);
