@@ -8,7 +8,7 @@
         }
         if (longShiftConfirmation) {
             longShiftConfirmation.querySelector('[data-dismiss-long-shift]').addEventListener('click', function() {
-                longShiftConfirmation.hidden = true;
+                longShiftConfirmation.remove();
             });
         }
 
