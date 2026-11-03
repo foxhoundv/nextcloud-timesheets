@@ -1,5 +1,17 @@
 (function() {
     function init() {
+        const longShiftConfirmation = document.getElementById('timesheets-long-shift-confirmation');
+        if (window.location.hash === '#timesheets-long-shift-confirmation' && longShiftConfirmation) {
+            longShiftConfirmation.hidden = false;
+            window.history.replaceState(window.history.state, '', window.location.pathname + window.location.search);
+            longShiftConfirmation.focus();
+        }
+        if (longShiftConfirmation) {
+            longShiftConfirmation.querySelector('[data-dismiss-long-shift]').addEventListener('click', function() {
+                longShiftConfirmation.hidden = true;
+            });
+        }
+
         document.querySelectorAll('#timesheets-elapsed, #timesheets-job-elapsed').forEach(function(elapsed) {
             const initialSeconds = Number(elapsed.dataset.seconds);
             const started = performance.now();
@@ -44,6 +56,13 @@
                 const data = await response.json();
                 if (data.status !== 'ok') {
                     throw new Error('Unexpected time response');
+                }
+                if (form.id === 'timesheets-clock-form' && data.longShiftConfirmation === true) {
+                    const target = new URL(window.location.href);
+                    target.hash = 'timesheets-long-shift-confirmation';
+                    window.history.replaceState(window.history.state, '', target.toString());
+                    window.location.reload();
+                    return;
                 }
                 window.location.reload();
             } catch (error) {

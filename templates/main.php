@@ -18,6 +18,12 @@ $entries = $_['entries'];
         <a class="timesheets-text-link" href="#timesheets-history"><?php p($l->t('View shift history')); ?></a>
     </header>
 
+    <section id="timesheets-long-shift-confirmation" class="timesheets-notice" role="status" aria-live="polite" tabindex="-1" hidden>
+        <h2><?php p($l->t('Shift length reminder')); ?></h2>
+        <p><?php p($l->t('Your completed shift met or exceeded the configured net shift threshold. The saved actual and reported time are unchanged.')); ?></p>
+        <button type="button" class="secondary" data-dismiss-long-shift><?php p($l->t('Dismiss')); ?></button>
+    </section>
+
     <section class="timesheets-notice" aria-labelledby="timesheets-availability">
         <h2 id="timesheets-availability"><?php p($l->t('Your current shift')); ?></h2>
         <?php if ($_['activeShift'] !== null): ?>
@@ -47,7 +53,7 @@ $entries = $_['entries'];
         <?php endif; ?>
         <p class="timesheets-clock-help"><?php p($l->t('Taking a break? Clock out when your break starts, then clock in again when you return. Each work period is a separate shift; time between shifts is excluded from recorded work time.')); ?></p>
         <p class="timesheets-clock-help"><?php p($l->t('There is no paused shift or automatic break deduction. Time while clocked in counts as work. Starting again requires shift tracking and your shift permission to remain enabled.')); ?></p>
-        <p class="timesheets-clock-help"><?php p($l->t('Actual elapsed time is saved using the server clock. Optional rounding is saved separately using the settings at clock-out. Long-shift confirmations are not available yet. End active jobs before taking an unpaid break; a job left running continues recording time even outside a shift.')); ?></p>
+        <p class="timesheets-clock-help"><?php p($l->t('Actual elapsed time is saved using the server clock. Optional rounding is saved separately using the settings at clock-out. End active jobs before taking an unpaid break; a job left running continues recording time even outside a shift.')); ?></p>
     </section>
 
     <section class="timesheets-notice" aria-labelledby="timesheets-job-title">

@@ -160,6 +160,7 @@ if ($phase === 'prepare') {
         'settings' => [
             'shift_rounding_enabled' => $config->getAppValue('timesheets', 'shift_rounding_enabled', '0'),
             'job_rounding_enabled' => $config->getAppValue('timesheets', 'job_rounding_enabled', '0'),
+            'net_shift_threshold' => $config->getAppValue('timesheets', 'net_shift_threshold', '0'),
         ],
     ];
     $state['active'] = $clock->current($state['userId']);

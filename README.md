@@ -11,7 +11,7 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 
 ## App versioning
 
-Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `0.1.16` follows this format.
+Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `0.2.1` follows this format.
 
 Before changing the app version for an update, ask the project owner whether it is a **Major**, **Minor**, or **Sub-minor** change; do not choose a level or bump the version without that answer. Increment the selected component and reset any lower-order components to 1: a sub-minor update changes only the last component, a minor update resets Sub-minor to 1, and a major update resets Minor and Sub-minor to 1. For example, `0.1.15` to `0.1.16` is Sub-minor, `0.1.99` to `0.2.1` is Minor, and `0.9.99` to `1.1.1` is Major.
 
@@ -22,7 +22,7 @@ Before changing the app version for an update, ask the project owner whether it 
 - Shift tracking and job tracking can each operate independently. Enabling both reveals additional settings governing their interaction.
 - Administrators choose whether shift clock-out is blocked by an active job (default) or allowed while leaving the job running. Requiring an active shift for job clock-in is optional and defaults off; it applies only to users with both tracking permissions when both global modes are enabled.
 - Shift and job rounding can be enabled independently. The administrator selects 5, 10, 15, or 30 minutes for each enabled rule.
-- A configurable net-shift threshold will trigger a confirmation after clock-out (planned). Unpaid breaks are gaps between separate shifts: clock out for a break, then clock in again when work resumes.
+- A configurable net-shift threshold triggers a dismissible reminder after clock-out when actual shift time reaches the threshold; it never blocks clock-out or changes recorded time. Unpaid breaks are gaps between separate shifts: clock out for a break, then clock in again when work resumes.
 - Shift intervals crossing midnight are attributed to their start date. Their duration remains the full elapsed interval.
 - Job intervals are separate rows, one for each clock-in/out pair. Time in a completed shift outside job intervals counts as shop time.
 - Completed times display using the employee's current time-zone setting. An open interval retains its clock-in time zone through clock-out.
@@ -56,7 +56,7 @@ Before changing the app version for an update, ask the project owner whether it 
 
 To check both entry points over HTTP, run `php apps/timesheets/tests/entrypoints.php /path/to/nextcloud https://testing-instance` on the testing server as its web-server user. Adjust the app path for `custom_apps`. This test creates a temporary account, checks regular-user access, briefly promotes it for admin-only checks, tests saving and CSRF protection, restores the original settings, and deletes the account and cookies. Use only the testing instance; its HTTPS certificate must be trusted by PHP/cURL.
 
-The **Timesheet Administration** form groups tracking, combined-tracking rules, rounding, and shift-review preferences with descriptions for every control. Global shift/job switches control new clock-ins independently. Unpaid breaks use separate clock-out/in work periods. Optional rounding affects separately reported durations only. Long-shift confirmations are still in development; their preference is saved but not yet applied.
+The **Timesheet Administration** form groups tracking, combined-tracking rules, rounding, and shift-review preferences with descriptions for every control. Global shift/job switches control new clock-ins independently. Unpaid breaks use separate clock-out/in work periods. Optional rounding affects separately reported durations only.
 
 The dashboard shows your current shift, a live elapsed-time estimate, all-date recorded duration for completed shifts, completed/open shift counts, and shift history. Durations use hours and minutes (for example, `2h 05m`), not decimal hours. Open shifts have no finalized duration. Empty history is shown as an empty state, not a sample shift.
 
@@ -155,6 +155,12 @@ An additive migration adds nullable rounding fields to shifts and jobs without c
 
 On the testing server, run `php apps/timesheets/tests/rounding.php /path/to/nextcloud` for every interval's second-level boundaries, half-up ties, independent switches, clock-out snapshots, immutable history, actual overlap preservation, legacy records, invalid-input rollback, and stale close protection. The test restores original settings and removes its temporary account/intervals. The HTTP entry-point suite verifies administration persistence, validation, and omission compatibility. Use only the testing instance when other testing users are idle; adjust for `custom_apps`.
 
+### Long-shift threshold reminder
+
+The **Net shift threshold (minutes)** setting controls a post-clock-out reminder. A value of `0` disables it; a positive value shows a dismissible dashboard reminder when a completed shift's **actual elapsed seconds** meet or exceed the threshold in minutes. Clock-out always completes first; the reminder neither blocks the action nor changes saved time. Separate-shift break gaps are excluded, and rounding does not affect the threshold. Invalid thresholds are rejected before administration preferences are saved. The reminder appears after the dashboard reloads and can be dismissed.
+
+On the testing server, the shift-clock and HTTP entry-point suites verify below/equal/above threshold behavior, zero/off behavior, successful clock-out while tracking is disabled, and the response consumed by the dashboard. Run the existing suites as described above; they restore settings and remove their test accounts and intervals.
+
 ### Keeping settings and time logs during updates
 
 Normal in-place app updates preserve all saved administration preferences (including non-default values), historical shift/job logs, and active shifts/jobs. These live in Nextcloud's database, not in replaceable app files or browser storage. Defaults are used only when a preference has never been saved; startup and upgrades must not overwrite saved preferences.
@@ -203,7 +209,7 @@ The existing `.gitignore` rules exclude `.env` from Git. Keep real credentials o
 
 ## Development status
 
-This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time and optional saved rounding, configurable shift/job interaction, completed-shift job/shop breakdowns, unpaid breaks as gaps between separate shifts, and opt-in user/group access and tracking grants. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Delegated administration, confirmations, storage integration, printable views, and workbook generation are planned next.
+This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time and optional saved rounding, configurable shift/job interaction, completed-shift job/shop breakdowns, post-clock-out long-shift reminders, unpaid breaks as gaps between separate shifts, and opt-in user/group access and tracking grants. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Delegated administration, storage integration, printable views, and workbook generation are planned next.
 
 ## Longer-term direction
 

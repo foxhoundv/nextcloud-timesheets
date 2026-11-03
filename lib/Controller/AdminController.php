@@ -43,12 +43,19 @@ class AdminController extends Controller {
             return new JSONResponse(['message' => $this->l->t('Choose valid rounding settings.')], 400);
         }
 
+        $thresholdInput = preg_match('/\A[0-9]+\z/', $net_shift_threshold) === 1
+            ? ltrim($net_shift_threshold, '0')
+            : $net_shift_threshold;
+        $threshold = filter_var($thresholdInput === '' ? '0' : $thresholdInput, FILTER_VALIDATE_INT);
+        if ($threshold === false || $threshold < 0 || $threshold > intdiv(PHP_INT_MAX, 60)) {
+            return new JSONResponse(['message' => $this->l->t('Enter a valid nonnegative shift threshold in minutes.')], 400);
+        }
         $settings = [
             'shift_tracking' => $shift_tracking === '1' ? '1' : '0',
             'job_tracking' => $job_tracking === '1' ? '1' : '0',
             'shift_rounding' => $shift_rounding,
             'job_rounding' => $job_rounding,
-            'net_shift_threshold' => max(0, (int) $net_shift_threshold),
+            'net_shift_threshold' => $threshold,
         ];
         if ($job_require_shift !== null) {
             $settings['job_require_shift'] = $job_require_shift;

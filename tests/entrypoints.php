@@ -4,12 +4,14 @@ declare(strict_types=1);
 
 use OCA\Timesheets\Settings\AdminSection;
 use OCA\Timesheets\Settings\AdminSettings;
+use OCA\Timesheets\Controller\AdminController;
 use OCA\Timesheets\Db\Shift;
 use OCA\Timesheets\Db\ShiftMapper;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IDBConnection;
 use OCP\IGroupManager;
+use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\Server;
 use OCP\Settings\IManager;
@@ -143,7 +145,7 @@ function pageDocument(string $body): DOMDocument {
     return $document;
 }
 
-function setTrackingOverHttp(bool $enabled, string $token): void {
+function setTrackingOverHttp(bool $enabled, string $token, ?string $threshold = null): void {
     global $adminGroup, $user, $originalValues;
     $adminGroup->addUser($user);
     try {
@@ -152,7 +154,7 @@ function setTrackingOverHttp(bool $enabled, string $token): void {
             'job_tracking' => $originalValues['job_tracking'] ?? '0',
             'shift_rounding' => $originalValues['shift_rounding'] ?? '15',
             'job_rounding' => $originalValues['job_rounding'] ?? '15',
-            'net_shift_threshold' => $originalValues['net_shift_threshold'] ?? '0',
+            'net_shift_threshold' => $threshold ?? $originalValues['net_shift_threshold'] ?? '0',
         ], $token);
         check($response['status'] === 200, 'Tracking test preference saved through the web application');
     } finally {
@@ -267,6 +269,9 @@ try {
     check($denied['status'] === 412, 'Clock-in requires a CSRF token (HTTP ' . $denied['status'] . ')');
     $started = request($clockInPath, ['userId' => 'someone-else', 'clockIn' => '2000-01-01'], $token);
     check($started['status'] === 200, 'Regular account can clock in with tracking enabled (HTTP ' . $started['status'] . ')');
+    $startedData = json_decode($started['body'], true, 512, JSON_THROW_ON_ERROR);
+    check(($startedData['longShiftConfirmation'] ?? true) === false,
+        'Clock-in response does not request a long-shift reminder');
     $active = $shiftMapper->findOpenForUser($userId);
     check($active !== null && $active->getUserId() === $userId
         && str_starts_with($active->getClockIn(), gmdate('Y-m-d')),
@@ -276,19 +281,35 @@ try {
     check($duplicate['status'] === 409, 'Duplicate clock-in is rejected');
     $running = request('/index.php/apps/timesheets/');
     check($running['status'] === 200 && str_contains($running['body'], 'id="timesheets-elapsed"')
-        && str_contains($running['body'], 'name="shiftId"'), 'Dashboard shows the active shift and clock-out form');
+        && str_contains($running['body'], 'name="shiftId"')
+        && str_contains($running['body'], 'id="timesheets-long-shift-confirmation"')
+        && str_contains($running['body'], 'data-dismiss-long-shift'),
+        'Dashboard has the hidden dismissible long-shift reminder and clock-out form');
     $denied = request($clockOutPath, ['shiftId' => $active->getId()]);
     check($denied['status'] === 412, 'Clock-out requires a CSRF token');
     $stale = request($clockOutPath, ['shiftId' => $active->getId() + 1], $token);
     check($stale['status'] === 409, 'Clock-out rejects another or stale shift ID');
-    setTrackingOverHttp(false, $token);
+    $active->setClockIn(gmdate('Y-m-d H:i:s', time() - 120));
+    $shiftMapper->update($active);
+    setTrackingOverHttp(false, $token, '1');
     $denied = request($clockInPath, [], $token);
     check($denied['status'] === 403, 'Disabled tracking rejects new clock-ins on the server');
     $stopped = request($clockOutPath, ['shiftId' => $active->getId()], $token);
-    check($stopped['status'] === 200 && $shiftMapper->findOpenForUser($userId) === null,
-        'Existing shifts can be clocked out even after tracking is disabled');
+    $stoppedData = json_decode($stopped['body'], true, 512, JSON_THROW_ON_ERROR);
+    check($stopped['status'] === 200 && $shiftMapper->findOpenForUser($userId) === null
+        && ($stoppedData['longShiftConfirmation'] ?? false) === true,
+        'Clock-out still succeeds while tracking is disabled and returns a threshold reminder');
     $duplicate = request($clockOutPath, ['shiftId' => $active->getId()], $token);
     check($duplicate['status'] === 409, 'Duplicate clock-out is rejected');
+    setTrackingOverHttp(true, $token, '0');
+    $shortStarted = request($clockInPath, [], $token);
+    check($shortStarted['status'] === 200, 'Clock-in succeeds when threshold reminders are disabled');
+    $shortShift = $shiftMapper->findOpenForUser($userId);
+    $testShifts[] = $shortShift;
+    $shortStopped = request($clockOutPath, ['shiftId' => $shortShift->getId()], $token);
+    $shortData = json_decode($shortStopped['body'], true, 512, JSON_THROW_ON_ERROR);
+    check($shortStopped['status'] === 200 && ($shortData['longShiftConfirmation'] ?? true) === false,
+        'Successful clock-out returns no reminder when threshold is zero');
 
     $adminGroup->addUser($user);
     check($groupManager->isAdmin($userId), 'Temporary account is promoted for admin-only checks');
@@ -360,10 +381,23 @@ try {
         ['job_rounding' => '0'],
         ['shift_rounding_enabled' => 'yes'],
         ['job_rounding_enabled' => '2'],
+        ['net_shift_threshold' => '-1', 'shift_tracking' => '0'],
+        ['net_shift_threshold' => '1.5'],
     ] as $invalid) {
         check(request('/index.php/apps/timesheets/settings', $invalid, $token)['status'] === 400,
             'Malformed rounding preference is explicitly rejected before any settings are saved');
     }
+    $thresholdController = new AdminController('timesheets', Server::get(IRequest::class), $config,
+        \OC::$server->getL10N('timesheets'));
+    check($thresholdController->save(
+        shift_tracking: $config->getAppValue('timesheets', 'shift_tracking', '0'),
+        job_tracking: $config->getAppValue('timesheets', 'job_tracking', '0'),
+        shift_rounding: $config->getAppValue('timesheets', 'shift_rounding', '15'),
+        job_rounding: $config->getAppValue('timesheets', 'job_rounding', '15'),
+        net_shift_threshold: '001',
+    )->getStatus() === 200
+        && $config->getAppValue('timesheets', 'net_shift_threshold') === '1',
+        'Threshold accepts a nonnegative integer with leading zeros and stores its canonical value');
     check(request('/index.php/apps/timesheets/settings', [
         'shift_tracking' => '1', 'job_tracking' => '1', 'shift_rounding' => '5', 'job_rounding' => '30',
     ], $token)['status'] === 200, 'Older settings payload can omit rounding enable switches');

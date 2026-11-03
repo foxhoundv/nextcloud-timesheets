@@ -36,6 +36,8 @@ $config = Server::get(IConfig::class);
 $previousAccess = $config->getAppValue('timesheets', 'access_policy', '');
 $previousTracking = in_array('shift_tracking', $config->getAppKeys('timesheets'), true)
     ? $config->getAppValue('timesheets', 'shift_tracking') : null;
+$previousThreshold = in_array('net_shift_threshold', $config->getAppKeys('timesheets'), true)
+    ? $config->getAppValue('timesheets', 'net_shift_threshold') : null;
 $testUserId = 'timesheets-clock-' . bin2hex(random_bytes(8));
 $user = Server::get(IUserManager::class)->createUser($testUserId, bin2hex(random_bytes(24)));
 check($user !== false, 'Clock test account created');
@@ -60,6 +62,7 @@ try {
     $config->setAppValue('timesheets', 'shift_tracking', '0');
     expectConflict(fn () => $service->clockIn($testUserId), 403, 'Disabled tracking rejects clock-in');
     $config->setAppValue('timesheets', 'shift_tracking', '1');
+    $config->setAppValue('timesheets', 'net_shift_threshold', '11');
     $config->setUserValue($testUserId, 'core', 'timezone', 'America/Los_Angeles');
     $clock->timestamp = strtotime('2026-11-02 07:55:00 UTC');
     $shift = $service->clockIn($testUserId);
@@ -75,7 +78,8 @@ try {
         'An open shift keeps its clock-in timezone after a preference change');
     $clock->timestamp -= 1;
     try {
-        $service->clockOut($testUserId, $shift->getId());
+        check(!$service->clockOut($testUserId, $shift->getId()),
+            'Below-threshold actual duration does not trigger a reminder');
         throw new LogicException('Backward server clock was accepted');
     } catch (RuntimeException $error) {
         check(str_contains($error->getMessage(), 'server clock'), 'Backward server clock is rejected without changing the shift');
@@ -83,7 +87,8 @@ try {
     check($mapper->findOpenForUser($testUserId) !== null, 'Failed clock-out leaves the shift open');
     $clock->timestamp = strtotime('2026-11-02 08:05:59 UTC');
     $config->setAppValue('timesheets', 'shift_tracking', '0');
-    $service->clockOut($testUserId, $shift->getId());
+    check(!$service->clockOut($testUserId, $shift->getId()),
+        'Below-threshold shift can be closed after tracking is disabled without a reminder');
     $closed = $mapper->findByUser($testUserId)[0];
     check($closed->getDurationSeconds() === 659 && $closed->getDurationMinutes() === 10,
         'Actual seconds are retained and displayed minutes truncate without rounding');
@@ -92,6 +97,7 @@ try {
     check($closed->getStatus() === 'closed' && $closed->getOpenUserId() === null, 'Clock-out closes the shift and releases its unique open slot');
     expectConflict(fn () => $service->clockOut($testUserId, $shift->getId()), 409, 'Repeated clock-out is rejected');
     $config->setAppValue('timesheets', 'shift_tracking', '1');
+    $config->setAppValue('timesheets', 'net_shift_threshold', '120');
     $config->setUserValue($testUserId, 'core', 'timezone', 'America/Los_Angeles');
     $clock->timestamp = strtotime('2026-11-01 08:30:00 UTC');
     $next = $service->clockIn($testUserId);
@@ -99,7 +105,8 @@ try {
     expectConflict(fn () => $service->clockOut($testUserId, $shift->getId()), 409, 'A stale clock-out cannot close a new shift');
     check($mapper->findOpenForUser($testUserId)->getId() === $next->getId(), 'New shift survives a stale request');
     $clock->timestamp = strtotime('2026-11-01 10:30:00 UTC');
-    $service->clockOut($testUserId, $next->getId());
+    check($service->clockOut($testUserId, $next->getId()),
+        'Actual duration exactly equal to threshold triggers confirmation');
     $byId = [];
     foreach ($mapper->findByUser($testUserId) as $entry) {
         $byId[$entry->getId()] = $entry;
@@ -109,7 +116,39 @@ try {
         'Conditional update prevents a concurrent or repeated close from overwriting duration');
     check($service->current($testUserId) === null, 'No active shift remains after clock-out');
 
-    $previousMinutes = array_sum(array_map(static fn (Shift $entry): int => $entry->getDurationMinutes(),
+    $clock->timestamp += 3600;
+    $overThreshold = $service->clockIn($testUserId);
+    $saved[] = $overThreshold;
+    $config->setAppValue('timesheets', 'net_shift_threshold', '11');
+    $clock->timestamp += 661;
+    check($service->clockOut($testUserId, $overThreshold->getId()),
+        'Actual duration above threshold triggers confirmation to the nearest second');
+    $clock->timestamp += 3600;
+    $disabledThreshold = $service->clockIn($testUserId);
+    $saved[] = $disabledThreshold;
+    $config->setAppValue('timesheets', 'net_shift_threshold', '0');
+    $clock->timestamp += 7200;
+    check(!$service->clockOut($testUserId, $disabledThreshold->getId()),
+        'Zero threshold disables the reminder regardless of duration');
+    $clock->timestamp += 3600;
+    $invalidThreshold = $service->clockIn($testUserId);
+    $saved[] = $invalidThreshold;
+    $config->setAppValue('timesheets', 'net_shift_threshold', 'not-a-number');
+    $clock->timestamp += 600;
+    try {
+        $service->clockOut($testUserId, $invalidThreshold->getId());
+        throw new LogicException('Invalid saved threshold was accepted');
+    } catch (RuntimeException $error) {
+        check(str_contains($error->getMessage(), 'threshold is invalid')
+            && $mapper->findOpenForUser($testUserId)?->getId() === $invalidThreshold->getId(),
+            'Invalid saved threshold is surfaced without closing or altering the active shift');
+    }
+    $config->setAppValue('timesheets', 'net_shift_threshold', '0');
+    check(!$service->clockOut($testUserId, $invalidThreshold->getId()),
+        'Active shift can still be closed after administrator repairs the threshold setting');
+
+    $previousSeconds = array_sum(array_map(static fn (Shift $entry): int =>
+        $entry->getDurationSeconds() ?? $entry->getDurationMinutes() * 60,
         $mapper->findByUser($testUserId)));
     $config->setUserValue($testUserId, 'core', 'timezone', 'UTC');
     $workPeriods = [];
@@ -147,7 +186,7 @@ try {
         Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
         Server::get(\OCA\Timesheets\Service\ShopTimeService::class));
     $params = $page->index()->getParams();
-    $totalMinutes = $previousMinutes + 480;
+    $totalMinutes = intdiv($previousSeconds + 480 * 60, 60);
     check($params['stats'][0]['value'] === sprintf('%dh %02dm', intdiv($totalMinutes, 60), $totalMinutes % 60),
         'Dashboard recorded-time total sums work periods without adding break gaps');
     check(array_column(array_slice($params['entries'], 0, 3), 'total') === ['4h 15m', '1h 45m', '2h 00m']
@@ -186,6 +225,15 @@ try {
     } else {
         $config->setAppValue('timesheets', 'shift_tracking', $previousTracking);
     }
+    if ($previousThreshold === null) {
+        $config->deleteAppValue('timesheets', 'net_shift_threshold');
+    } else {
+        $config->setAppValue('timesheets', 'net_shift_threshold', $previousThreshold);
+    }
+    check($previousThreshold === null
+        ? !in_array('net_shift_threshold', $config->getAppKeys('timesheets'), true)
+        : $config->getAppValue('timesheets', 'net_shift_threshold') === $previousThreshold,
+        'Original long-shift threshold restored');
     if (!$user->delete()) {
         throw new RuntimeException('Failed to remove clock test account');
     }

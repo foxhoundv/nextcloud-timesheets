@@ -79,11 +79,11 @@ class ShiftClockService {
         }
     }
 
-    public function clockOut(string $userId, int $shiftId): void {
-        $this->transaction->run($userId, fn () => $this->stop($userId, $shiftId));
+    public function clockOut(string $userId, int $shiftId): bool {
+        return $this->transaction->run($userId, fn (): bool => $this->stop($userId, $shiftId));
     }
 
-    private function stop(string $userId, int $shiftId): void {
+    private function stop(string $userId, int $shiftId): bool {
         if ($shiftId <= 0) {
             throw new \DomainException('A valid shift ID is required.', 400);
         }
@@ -95,6 +95,7 @@ class ShiftClockService {
             && $this->config->getAppValue('timesheets', 'shift_end_job_policy', 'block') === 'block') {
             throw new \DomainException('End your active job before clocking out of the shift.', 409);
         }
+        $thresholdSeconds = $this->thresholdSeconds();
         $now = $this->now();
         $seconds = $now->getTimestamp() - $this->parseTimestamp($shift->getClockIn())->getTimestamp();
         if ($seconds < 0) {
@@ -104,6 +105,17 @@ class ShiftClockService {
         if (!$this->shiftMapper->closeShift($shift, $now->format('Y-m-d H:i:s'), $seconds, $rounding['interval'], $rounding['seconds'])) {
             throw new \DomainException('This shift was changed by another request. Refresh the page.', 409);
         }
+        return $thresholdSeconds > 0 && $seconds >= $thresholdSeconds;
+    }
+
+    private function thresholdSeconds(): int {
+        $value = $this->config->getAppValue('timesheets', 'net_shift_threshold', '0');
+        $thresholdInput = preg_match('/\A[0-9]+\z/', $value) === 1 ? ltrim($value, '0') : $value;
+        $minutes = filter_var($thresholdInput === '' ? '0' : $thresholdInput, FILTER_VALIDATE_INT);
+        if ($minutes === false || $minutes < 0 || $minutes > intdiv(PHP_INT_MAX, 60)) {
+            throw new \RuntimeException('The saved net shift threshold is invalid. Ask an administrator to review it.');
+        }
+        return $minutes * 60;
     }
 
     public function parseTimestamp(?string $value): DateTimeImmutable {

@@ -122,7 +122,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">
                 <label for="net_shift_threshold"><?php p($l->t('Net shift threshold (minutes)')); ?></label>
-                <p id="net_shift_threshold_help"><?php p($l->t('The net work duration intended to trigger a confirmation after clock-out, excluding breaks. Enter minutes: for example, 480 is 8 hours. Set 0 for no threshold.')); ?></p>
+                <p id="net_shift_threshold_help"><?php p($l->t('After clock-out, show a dismissible reminder when actual shift duration meets or exceeds this threshold. It never blocks clock-out or changes saved time. Separate-shift break gaps are excluded; rounding does not affect the threshold. Enter minutes (for example, 480 is 8 hours). Set 0 to disable.')); ?></p>
             </div>
             <input type="number" name="net_shift_threshold" id="net_shift_threshold" min="0" step="1" aria-describedby="net_shift_threshold_help" value="<?php p((string) $settings['net_shift_threshold']); ?>">
         </div>
