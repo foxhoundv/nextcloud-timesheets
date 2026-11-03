@@ -8,6 +8,7 @@ use OCA\Timesheets\Service\ShiftService;
 use OCA\Timesheets\Service\ShiftClockService;
 use OCA\Timesheets\Service\AccessService;
 use OCA\Timesheets\Service\JobClockService;
+use OCA\Timesheets\Service\ShopTimeService;
 use OCA\Timesheets\Db\JobMapper;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
@@ -28,6 +29,7 @@ class PageController extends Controller {
         private AccessService $access,
         private JobClockService $jobClock,
         private JobMapper $jobs,
+        private ShopTimeService $shopTime,
     ) {
         parent::__construct($appName, $request);
     }
@@ -46,13 +48,15 @@ class PageController extends Controller {
             $response->setStatus(403);
             return $response;
         }
-        $stats = $this->buildStats($shifts);
+        $breakdown = $this->shopTime->calculate($shifts, $jobs);
+        $stats = $this->buildStats($shifts, $breakdown);
 
-        $entries = $this->buildEntries($shifts, $userId);
+        $entries = $this->buildEntries($shifts, $userId, $breakdown['shifts']);
 
         return new TemplateResponse('timesheets', 'main', [
             'stats' => $stats,
             'entries' => $entries,
+            'breakdown' => $breakdown,
             'trackingEnabled' => $this->clock->isEnabled(),
             'canStartShift' => $permissions['shift'],
             'activeShift' => $this->clock->current($userId),
@@ -84,37 +88,44 @@ class PageController extends Controller {
         return $entries;
     }
 
-    private function buildStats(array $shifts): array {
-        $recordedMinutes = 0;
+    private function buildStats(array $shifts, array $breakdown): array {
+        $recordedSeconds = 0;
         $completedShiftCount = 0;
         $openShiftCount = 0;
 
         foreach ($shifts as $shift) {
-            $duration = (int) ($shift->getDurationMinutes() ?? 0);
+            $duration = $breakdown['shifts'][$shift->getId()]['totalSeconds']
+                ?? $shift->getDurationSeconds() ?? (int) ($shift->getDurationMinutes() ?? 0) * 60;
             $status = (string) ($shift->getStatus() ?? 'closed');
 
             if ($status === 'open') {
                 $openShiftCount++;
             } else {
                 $completedShiftCount++;
-                $recordedMinutes += $duration;
+                $recordedSeconds += $duration;
             }
         }
 
         return [
-            ['label' => 'Recorded time', 'value' => $this->formatMinutes($recordedMinutes), 'description' => 'Total saved duration of completed shifts, across all dates.'],
+            ['label' => 'Recorded time', 'value' => $this->formatMinutes(intdiv($recordedSeconds, 60)), 'description' => 'Total saved duration of completed shifts, across all dates.'],
             ['label' => 'Completed shifts', 'value' => (string) $completedShiftCount, 'description' => 'Shifts that have been closed.'],
             ['label' => 'Open shifts', 'value' => (string) $openShiftCount, 'description' => 'Shifts that have not been closed.'],
+            ['label' => 'Job time in shifts', 'value' => $this->formatMinutes(intdiv($breakdown['jobSeconds'], 60)), 'description' => 'Job time overlapping completed shifts with recorded start and end times, across all dates.'],
+            ['label' => 'Shop time', 'value' => $this->formatMinutes(intdiv($breakdown['shopSeconds'], 60)), 'description' => 'Time in completed shifts with recorded start and end times that was not spent on jobs, across all dates.'],
         ];
     }
 
-    private function buildEntries(array $shifts, string $userId): array {
+    private function buildEntries(array $shifts, string $userId, array $breakdowns): array {
         $entries = [];
         $userZone = $this->clock->userTimeZone($userId);
 
         foreach ($shifts as $shift) {
             $status = (string) ($shift->getStatus() ?? 'closed');
             $durationMinutes = (int) ($shift->getDurationMinutes() ?? 0);
+            $breakdown = $breakdowns[$shift->getId()] ?? null;
+            if ($breakdown !== null) {
+                $durationMinutes = intdiv($breakdown['totalSeconds'], 60);
+            }
             $zone = $status === 'open' ? new \DateTimeZone($shift->getTimeZone() ?? 'UTC') : $userZone;
             $clockIn = $shift->getClockIn() === null ? null : $this->clock->parseTimestamp($shift->getClockIn())->setTimezone($zone);
             $clockOut = $shift->getClockOut() === null ? null : $this->clock->parseTimestamp($shift->getClockOut())->setTimezone($zone);
@@ -124,6 +135,8 @@ class PageController extends Controller {
                 'total' => $status === 'open' ? null : $this->formatMinutes($durationMinutes),
                 'status' => $status === 'open' ? 'In progress' : 'Closed',
                 'isOpen' => $status === 'open',
+                'jobTime' => $breakdown === null ? null : $this->formatMinutes(intdiv($breakdown['jobSeconds'], 60)),
+                'shopTime' => $breakdown === null ? null : $this->formatMinutes(intdiv($breakdown['shopSeconds'], 60)),
                 'clockIn' => $clockIn?->format('Y-m-d H:i:s T'),
                 'clockOut' => $clockOut?->format('Y-m-d H:i:s T'),
             ];

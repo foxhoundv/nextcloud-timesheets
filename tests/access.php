@@ -62,7 +62,8 @@ try {
     $session->setUser($user);
     $page = new PageController('timesheets', Server::get(IRequest::class), new ShiftService($mapper),
         $session, $clock, Server::get(IURLGenerator::class), $access,
-        Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
+        Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
+        Server::get(\OCA\Timesheets\Service\ShopTimeService::class));
     check($page->index()->getStatus() === 403, 'Unassigned user without history receives explicit access denial');
     $grant = ['type' => 'user', 'id' => $id, 'shift' => false, 'job' => false];
     savePolicy(true, [$grant]);

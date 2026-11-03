@@ -243,7 +243,8 @@ $session = Server::get(IUserSession::class);
 $session->setUser($user);
 $page = new PageController('timesheets', Server::get(IRequest::class), new ShiftService($mapper),
     $session, $clock, Server::get(IURLGenerator::class), $access,
-    Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
+    Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
+    Server::get(\OCA\Timesheets\Service\ShopTimeService::class));
 $params = $page->index()->getParams();
 check($params['activeShift']['id'] === $active['id'] && $params['trackingEnabled'],
     'Dashboard still receives the active clock-out control and elapsed time');
@@ -251,6 +252,11 @@ check(count($params['entries']) === 2 && $params['entries'][1]['total'] === '2h 
     && $params['entries'][1]['clockIn'] === '2026-10-01 08:00:00 PDT'
     && $params['entries'][1]['clockOut'] === '2026-10-01 10:05:37 PDT',
     'Historical time log remains visible with original timestamps and duration');
+check($params['entries'][1]['jobTime'] === '0h 00m'
+    && $params['entries'][1]['shopTime'] === '2h 05m'
+    && $params['breakdown']['shopSeconds'] === 7537
+    && count($params['breakdown']['shifts']) === 1,
+    'Completed historical shift gains an exact read-only breakdown while active shift stays excluded');
 if (isset($state['jobs'])) {
     $jobMapper = Server::get(\OCA\Timesheets\Db\JobMapper::class);
     check(array_map('jobSnapshot', $jobMapper->findByUser($state['userId'])) === $state['jobs'],

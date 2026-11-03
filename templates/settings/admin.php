@@ -38,7 +38,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">
                 <label for="job_tracking"><?php p($l->t('Enable job tracking')); ?></label>
-                <p id="job_tracking_help"><?php p($l->t('Allow permitted users to start and end one job at a time using a Sales Order or job reference. Can be used without shift tracking. References are not linked to folders yet; shop-time calculations are planned. Disabling this prevents new jobs but lets users finish an active job.')); ?></p>
+                <p id="job_tracking_help"><?php p($l->t('Allow permitted users to start and end one job at a time using a Sales Order or job reference. Can be used without shift tracking. Completed shifts show job time and remaining shop time. References are not linked to folders yet. Disabling this prevents new jobs but lets users finish an active job.')); ?></p>
             </div>
             <input type="checkbox" id="job_tracking" name="job_tracking" value="1" aria-describedby="job_tracking_help" <?php echo !empty($settings['job_tracking']) ? 'checked' : ''; ?>>
         </div>

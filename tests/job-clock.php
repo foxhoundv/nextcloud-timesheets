@@ -101,7 +101,8 @@ try {
     $session->setUser($user);
     $page = new \OCA\Timesheets\Controller\PageController('timesheets', Server::get(\OCP\IRequest::class),
         new \OCA\Timesheets\Service\ShiftService($shifts), $session, $shiftClock,
-        Server::get(\OCP\IURLGenerator::class), $access, $jobClock, $jobs);
+        Server::get(\OCP\IURLGenerator::class), $access, $jobClock, $jobs,
+        new \OCA\Timesheets\Service\ShopTimeService($shiftClock));
     $access->save('{"restricted":true,"grants":[]}');
     $params = $page->index()->getParams();
     check($params['entries'] === [] && $params['activeJob']['id'] === $job->getId() && !$params['canStartJob'],

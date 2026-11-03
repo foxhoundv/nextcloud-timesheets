@@ -88,6 +88,10 @@ $entries = $_['entries'];
 
     <section aria-labelledby="timesheets-overview">
         <h2 id="timesheets-overview"><?php p($l->t('Your overview')); ?></h2>
+        <p class="timesheets-intro"><?php p($l->t('Job and shop totals include completed shifts only. Jobs outside shifts and breaks do not count toward these totals. An active job contributes only the part inside a completed shift. Calculations use exact seconds; each displayed duration shows whole minutes, so displayed parts can differ from the total by a minute. Reload to see newly saved intervals.')); ?></p>
+        <?php if ($_['breakdown']['unavailableShifts'] > 0): ?>
+            <p class="timesheets-intro"><?php p($l->t('%s completed shifts lack recorded start or end times. Their saved duration is retained in Recorded time, but their job/shop breakdown is unavailable and excluded from job/shop totals.', [(string) $_['breakdown']['unavailableShifts']])); ?></p>
+        <?php endif; ?>
         <div class="timesheets-stats">
         <?php foreach ($stats as $stat): ?>
             <div class="timesheets-stat-card">
@@ -117,6 +121,8 @@ $entries = $_['entries'];
                         <th scope="col"><?php p($l->t('Clock in')); ?></th>
                         <th scope="col"><?php p($l->t('Clock out')); ?></th>
                         <th scope="col"><?php p($l->t('Recorded duration')); ?></th>
+                        <th scope="col"><?php p($l->t('Job time in shift')); ?></th>
+                        <th scope="col"><?php p($l->t('Shop time')); ?></th>
                         <th scope="col"><?php p($l->t('Status')); ?></th>
                     </tr>
                 </thead>
@@ -127,6 +133,8 @@ $entries = $_['entries'];
                             <td><?php p($entry['clockIn'] ?? $l->t('Not recorded')); ?></td>
                             <td><?php p($entry['clockOut'] ?? $l->t('Not recorded')); ?></td>
                             <td class="timesheets-duration"><?php p($entry['total'] ?? $l->t('Not finalized')); ?></td>
+                            <td class="timesheets-duration"><?php p($entry['jobTime'] ?? $l->t($entry['isOpen'] ? 'Not finalized' : 'Unavailable')); ?></td>
+                            <td class="timesheets-duration"><?php p($entry['shopTime'] ?? $l->t($entry['isOpen'] ? 'Not finalized' : 'Unavailable')); ?></td>
                             <td>
                                 <span class="timesheets-status <?php echo $entry['isOpen'] ? 'open' : 'closed'; ?>">
                                     <?php p($l->t($entry['status'])); ?>

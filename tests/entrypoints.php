@@ -213,13 +213,38 @@ try {
     $historyDocument = pageDocument($history['body']);
     $historyPath = new DOMXPath($historyDocument);
     $values = $historyPath->query('//*[@id="timesheets"]//*[contains(concat(" ", normalize-space(@class), " "), " timesheets-stat-value ")]');
-    check($values->length === 3 && trim($values->item(0)->textContent) === '2h 05m'
+    check($values->length === 5 && trim($values->item(0)->textContent) === '2h 05m'
         && trim($values->item(1)->textContent) === '1' && trim($values->item(2)->textContent) === '1',
         'Overview shows all-date completed time and completed/open counts without including open durations');
     check($historyPath->query('//*[@id="timesheets-history"]//tbody/tr')->length === 2,
         'History shows one row per saved shift');
     check(str_contains($history['body'], 'Not finalized') && !str_contains($history['body'], '2.05h'),
         'Open durations are not finalized and closed durations use hours and minutes');
+    check(trim($values->item(3)->textContent) === '0h 00m'
+        && trim($values->item(4)->textContent) === '0h 00m'
+        && str_contains($history['body'], 'lack recorded start or end times')
+        && str_contains($history['body'], 'Unavailable'),
+        'Legacy shift without endpoints retains saved time but explicitly lacks a job/shop breakdown');
+    $testShifts[0]->setClockOut('2026-10-01 10:05:00');
+    $testShifts[0]->setDurationSeconds(7500);
+    $shiftMapper->update($testShifts[0]);
+    $historicalJob = new \OCA\Timesheets\Db\Job();
+    $historicalJob->setUserId($userId);
+    $historicalJob->setJobReference('SO-overlap');
+    $historicalJob->setJobDate('2026-10-01');
+    $historicalJob->setTimeZone('UTC');
+    $historicalJob->setClockIn('2026-10-01 09:00:15');
+    $historicalJob->setClockOut('2026-10-01 09:30:45');
+    $historicalJob->setDurationSeconds(1830);
+    Server::get(\OCA\Timesheets\Db\JobMapper::class)->insert($historicalJob);
+    $withBreakdown = request('/index.php/apps/timesheets/');
+    $breakdownPath = new DOMXPath(pageDocument($withBreakdown['body']));
+    $closedRow = $breakdownPath->query('//*[@id="timesheets-history"]//tbody/tr')->item(1);
+    check($withBreakdown['status'] === 200
+        && trim($breakdownPath->query('./td', $closedRow)->item(4)->textContent) === '0h 30m'
+        && trim($breakdownPath->query('./td', $closedRow)->item(5)->textContent) === '1h 34m'
+        && !str_contains($withBreakdown['body'], 'lack recorded start or end times'),
+        'HTTP dashboard shows exact-second job/shop projections with no stale legacy warning');
     check(preg_match('/id="initial-state-core-apps" value="([^"]+)"/', $dashboard['body'], $matches) === 1,
         'Dashboard includes app-menu state');
     $apps = json_decode(base64_decode(html_entity_decode($matches[1], ENT_QUOTES), true), true, 512, JSON_THROW_ON_ERROR);

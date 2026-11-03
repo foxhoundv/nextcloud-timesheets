@@ -143,7 +143,8 @@ try {
     $page = new \OCA\Timesheets\Controller\PageController('timesheets', Server::get(\OCP\IRequest::class),
         new \OCA\Timesheets\Service\ShiftService($mapper), $session, $service,
         Server::get(\OCP\IURLGenerator::class), Server::get(\OCA\Timesheets\Service\AccessService::class),
-        Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
+        Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
+        Server::get(\OCA\Timesheets\Service\ShopTimeService::class));
     $params = $page->index()->getParams();
     $totalMinutes = $previousMinutes + 480;
     check($params['stats'][0]['value'] === sprintf('%dh %02dm', intdiv($totalMinutes, 60), $totalMinutes % 60),

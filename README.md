@@ -18,7 +18,7 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 - Shift and job rounding can be enabled independently. The administrator selects 5, 10, 15, or 30 minutes for each enabled rule.
 - A configurable net-shift threshold will trigger a confirmation after clock-out (planned). Unpaid breaks are gaps between separate shifts: clock out for a break, then clock in again when work resumes.
 - Shift intervals crossing midnight are attributed to their start date. Their duration remains the full elapsed interval.
-- Job intervals are separate rows, one for each clock-in/out pair. Time in a shift outside job intervals will count as shop time when overlap calculations are implemented.
+- Job intervals are separate rows, one for each clock-in/out pair. Time in a completed shift outside job intervals counts as shop time.
 - Completed times display using the employee's current time-zone setting. An open interval retains its clock-in time zone through clock-out.
 - Employee workbooks have monthly sheets 01 through 12, plus a yearly cumulative sheet. Yearly totals use rounded durations.
 - Employees use a print-ready app view; only administrators can access or edit workbook files.
@@ -107,7 +107,7 @@ Job-only users do not need shift tracking. With both global modes enabled, **Com
 
 Rules are preserved when the combined-settings section is hidden. Existing open jobs can always be ended after global tracking is disabled or Timesheets permissions are revoked, and users retain their own job history. The shift-end policy still protects active intervals after such changes. Nextcloud account/app restrictions can still prevent access. Finish both job and shift before taking an unpaid break.
 
-Job timestamps are UTC, attributed to the local start date, with the original timezone retained while active and current user timezone used for completed history. Exact elapsed seconds include midnight, DST, and update downtime. Completed displayed durations use whole minutes without rounding. Job time is separate from shift time: do not add them together as extra work. Folder integration, shop-time overlap calculations, exports, rounding, and confirmations remain future work.
+Job timestamps are UTC, attributed to the local start date, with the original timezone retained while active and current user timezone used for completed history. Exact elapsed seconds include midnight, DST, and update downtime. Completed displayed durations use whole minutes without rounding. Job time is separate from shift time: do not add them together as extra work. Folder integration, exports, rounding, and confirmations remain future work.
 
 Both job POST endpoints (`/api/v1/jobs/clock-in`, requiring `reference`, and `/api/v1/jobs/clock-out`, requiring `jobId`) require authentication and CSRF. Identity/time come from the server. A nullable unique open-user slot prevents duplicate active jobs; conditional updates reject stale closes. Shift and job transitions serialize through a per-user database row lock inside transactions so concurrent job-start/shift-end requests cannot bypass interaction rules.
 
@@ -118,6 +118,18 @@ Version 0.1.6 adds the unique open-shift slot, saved timezone, and precise durat
 On the testing server, run `php apps/timesheets/tests/shift-clock.php /path/to/nextcloud` for database-backed clock transition, stale-request, cross-midnight, daylight-saving, and separate-shift break regression checks. Break checks verify multiple gaps, new timers/IDs, individual history rows, and exact saved seconds and dashboard totals excluding the gaps. Adjust for `custom_apps`. The test restores the tracking/access settings and deletes its temporary account and shifts. The existing entry-point suite also tests HTTP clock actions, break guidance, and CSRF enforcement.
 
 After deploying new routes and running `occ upgrade`, verify the web endpoints as well as CLI checks. If the web process still has an old APCu route list, refresh that testing instance's PHP/web process cache (or restart its container) and verify the login page is HTTP-ready before testing; a successful CLI upgrade alone does not clear a web worker's APCu cache.
+
+### Shop time in completed shifts
+
+Version 0.1.14 adds **Job time in shift** and **Shop time** to shift history, plus all-date **Job time in shifts** and **Shop time** totals. No additional setting is required. Existing permissions still govern access to your own history, including after tracking is disabled or Timesheets permissions are revoked.
+
+Shop time is the part of a completed shift not covered by any of your job intervals. Each job is clipped to the shift's start/end; time outside shifts and gaps between shifts are excluded. A job spanning a break contributes only inside the work periods on either side. An active job left running after shift clock-out contributes only up to that completed shift's end. Overlapping historical job intervals count their union, never twice.
+
+Active shifts have **Not finalized** breakdowns and do not enter these totals. Job-only tracking still records full job intervals without creating shift/shop time; shift-only tracking makes the whole completed shift shop time. Job history continues to show the full job duration, including time outside shifts, so its totals need not match job time in shifts.
+
+Calculations use UTC endpoints and exact seconds, including midnight and daylight-saving transitions, and stay attributed to the shift's start date. Seconds are summed before totals are displayed as completed whole minutes without rounding. Individually truncated displayed parts may sum to one minute less than a displayed total. Reload the dashboard after saving intervals. Legacy completed shifts missing start/end timestamps retain their saved duration in Recorded time, but show **Unavailable** job/shop breakdowns; an explicit warning identifies their exclusion from job/shop totals.
+
+Breakdowns are read-only projections of existing records. No schema migration, historical rewrite, preference reset, or active-timer change is needed. On the testing server, run `php apps/timesheets/tests/shop-time.php /path/to/nextcloud` for interval boundaries, breaks, open jobs, independent tracking, overlap union, exact seconds, DST/midnight, invalid/legacy data, randomized occupancy comparisons, user isolation, and dashboard rendering. It rolls back interval fixtures and removes its temporary account; adjust the app path for `custom_apps`.
 
 ### Keeping settings and time logs during updates
 
@@ -167,7 +179,7 @@ The existing `.gitignore` rules exclude `.env` from Git. Keep real credentials o
 
 ## Development status
 
-This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time, configurable shift/job interaction, unpaid breaks as gaps between separate shifts, and opt-in user/group access and tracking grants. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Delegated administration, rounding, confirmations, shop-time calculations, storage integration, printable views, and workbook generation are planned next.
+This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time, configurable shift/job interaction, completed-shift job/shop breakdowns, unpaid breaks as gaps between separate shifts, and opt-in user/group access and tracking grants. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Delegated administration, rounding, confirmations, storage integration, printable views, and workbook generation are planned next.
 
 ## Longer-term direction
 
