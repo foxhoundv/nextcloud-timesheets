@@ -19,6 +19,10 @@ class AdminSettings implements ISettings {
     }
 
     public function getForm(): TemplateResponse {
+        return new TemplateResponse('timesheets', 'settings/admin', $this->getFormParameters(true));
+    }
+
+    public function getFormParameters(bool $canManageAdminAssignments): array {
         $settings = [
             'shift_tracking' => $this->config->getAppValue('timesheets', 'shift_tracking', '0') === '1',
             'job_tracking' => $this->config->getAppValue('timesheets', 'job_tracking', '0') === '1',
@@ -27,7 +31,7 @@ class AdminSettings implements ISettings {
             'net_shift_threshold' => (int) $this->config->getAppValue('timesheets', 'net_shift_threshold', '0'),
         ];
 
-        return new TemplateResponse('timesheets', 'settings/admin', [
+        return [
             'settings' => $settings,
             'saveUrl' => $this->urlGenerator->linkToRoute('timesheets.admin.save'),
             'shiftRoundingEnabled' => $this->config->getAppValue('timesheets', 'shift_rounding_enabled', '0') === '1',
@@ -40,7 +44,8 @@ class AdminSettings implements ISettings {
                 'group' => $this->access->directory('group'),
                 'user' => $this->access->directory('user'),
             ],
-        ]);
+            'canManageAdminAssignments' => $canManageAdminAssignments,
+        ];
     }
 
     public function getSection(): string {

@@ -4,14 +4,12 @@ declare(strict_types=1);
 
 use OCA\Timesheets\Settings\AdminSection;
 use OCA\Timesheets\Settings\AdminSettings;
-use OCA\Timesheets\Controller\AdminController;
 use OCA\Timesheets\Db\Shift;
 use OCA\Timesheets\Db\ShiftMapper;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\IDBConnection;
 use OCP\IGroupManager;
-use OCP\IRequest;
 use OCP\IUserManager;
 use OCP\Server;
 use OCP\Settings\IManager;
@@ -255,6 +253,9 @@ try {
         'Regular account sees one Timesheets app-menu entry linked to the dashboard');
     $icon = request(parse_url($entries[0]['icon'], PHP_URL_PATH));
     check($icon['status'] === 200 && str_contains($icon['body'], '<svg'), 'Timesheets menu icon is accessible');
+    $denied = request('/index.php/apps/timesheets/admin');
+    check($denied['status'] === 403,
+        'Regular users cannot open the delegated Timesheets administration page (HTTP ' . $denied['status'] . ')');
     $token = tokenFrom($dashboard['body']);
     $denied = request('/index.php/settings/admin/timesheets');
     check($denied['status'] === 403, 'Regular account cannot open administration settings');
@@ -387,15 +388,15 @@ try {
         check(request('/index.php/apps/timesheets/settings', $invalid, $token)['status'] === 400,
             'Malformed rounding preference is explicitly rejected before any settings are saved');
     }
-    $thresholdController = new AdminController('timesheets', Server::get(IRequest::class), $config,
-        \OC::$server->getL10N('timesheets'));
-    check($thresholdController->save(
-        shift_tracking: $config->getAppValue('timesheets', 'shift_tracking', '0'),
-        job_tracking: $config->getAppValue('timesheets', 'job_tracking', '0'),
-        shift_rounding: $config->getAppValue('timesheets', 'shift_rounding', '15'),
-        job_rounding: $config->getAppValue('timesheets', 'job_rounding', '15'),
-        net_shift_threshold: '001',
-    )->getStatus() === 200
+    $canonicalThreshold = request('/index.php/apps/timesheets/settings', [
+        'shift_tracking' => $config->getAppValue('timesheets', 'shift_tracking', '0'),
+        'job_tracking' => $config->getAppValue('timesheets', 'job_tracking', '0'),
+        'shift_rounding' => $config->getAppValue('timesheets', 'shift_rounding', '15'),
+        'job_rounding' => $config->getAppValue('timesheets', 'job_rounding', '15'),
+        'net_shift_threshold' => '001',
+    ], $token);
+    Server::get(IAppConfig::class)->clearCache();
+    check($canonicalThreshold['status'] === 200
         && $config->getAppValue('timesheets', 'net_shift_threshold') === '1',
         'Threshold accepts a nonnegative integer with leading zeros and stores its canonical value');
     check(request('/index.php/apps/timesheets/settings', [
@@ -444,6 +445,44 @@ try {
         'Malformed access policy is rejected');
     check(request($searchPath, null, $token)['status'] === 200,
         'Administrators can search for assignment targets');
+    $delegatedPolicy = ['restricted' => true, 'grants' => [
+        ['type' => 'user', 'id' => $userId, 'shift' => false, 'job' => false, 'admin' => true],
+    ]];
+    check(request($accessPath, ['policy' => json_encode($delegatedPolicy, JSON_THROW_ON_ERROR)], $token)['status'] === 200,
+        'Nextcloud administrator can assign delegated Timesheets administration');
+    $adminGroup->removeUser($user);
+    $delegatedPage = request('/index.php/apps/timesheets/admin');
+    check($delegatedPage['status'] === 200 && str_contains($delegatedPage['body'], 'timesheets-admin-form')
+        && str_contains($delegatedPage['body'], 'delegated administrator assignments are read-only'),
+        'Delegated administrator can open the Timesheets settings page with delegation controls read-only');
+    $delegatedDashboard = request('/index.php/apps/timesheets/');
+    check($delegatedDashboard['status'] === 200
+        && str_contains($delegatedDashboard['body'], 'Timesheet Administration'),
+        'Delegated administrator sees the settings link on the dashboard');
+    $delegatedSettings = request('/index.php/apps/timesheets/settings', [
+        'shift_tracking' => '1',
+        'job_tracking' => '1',
+        'shift_rounding' => '5',
+        'job_rounding' => '30',
+        'net_shift_threshold' => '1',
+        'job_require_shift' => '0',
+        'shift_end_job_policy' => 'block',
+        'shift_rounding_enabled' => '0',
+        'job_rounding_enabled' => '0',
+    ], $token);
+    check($delegatedSettings['status'] === 200,
+        'Delegated administrator can save Timesheets settings');
+    check(request($searchPath, null, $token)['status'] === 200,
+        'Delegated administrator can search users for tracking assignments');
+    $delegatedPolicy['grants'][0]['shift'] = true;
+    check(request($accessPath, ['policy' => json_encode($delegatedPolicy, JSON_THROW_ON_ERROR)], $token)['status'] === 200,
+        'Delegated administrator can change tracking access while retaining admin assignments');
+    $savedDelegatedPolicy = $config->getAppValue('timesheets', 'access_policy');
+    $delegatedPolicy['grants'] = [];
+    check(request($accessPath, ['policy' => json_encode($delegatedPolicy, JSON_THROW_ON_ERROR)], $token)['status'] === 403
+        && $config->getAppValue('timesheets', 'access_policy') === $savedDelegatedPolicy,
+        'Delegated administrator cannot remove delegated administrator assignments');
+    $adminGroup->addUser($user);
     $accessGroup = $groupManager->createGroup('timesheets-access-' . bin2hex(random_bytes(6)));
     check($accessGroup !== false, 'Temporary access test group created');
     $accessGroup->addUser($user);
@@ -480,6 +519,8 @@ try {
     $adminAccess = request('/index.php/settings/admin/timesheets');
     check($adminAccess['status'] === 200 && str_contains($adminAccess['body'], 'Save access settings'),
         'Nextcloud administrators retain settings access without an assignment');
+    check(request('/index.php/apps/timesheets/admin')['status'] === 200,
+        'Nextcloud administrators retain access to the app settings page');
 } finally {
     foreach (Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($userId) as $entry) {
         Server::get(\OCA\Timesheets\Db\JobMapper::class)->delete($entry);

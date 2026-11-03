@@ -127,7 +127,7 @@ if ($phase === 'prepare') {
         $config->setAppValue('timesheets', $key, $value);
     }
     $state['accessPolicy'] = json_encode(['restricted' => true, 'grants' => [
-        ['type' => 'user', 'id' => $state['userId'], 'shift' => true, 'job' => true],
+        ['type' => 'user', 'id' => $state['userId'], 'shift' => true, 'job' => true, 'admin' => true],
     ]], JSON_THROW_ON_ERROR);
     $access->save($state['accessPolicy']);
     $config->setUserValue($state['userId'], 'core', 'timezone', 'America/Los_Angeles');
@@ -230,6 +230,8 @@ check(version_compare($config->getAppValue('timesheets', 'installed_version'), $
 if (isset($state['accessPolicy'])) {
     check($config->getAppValue('timesheets', 'access_policy') === $state['accessPolicy'],
         'Restricted access mode and tracking assignments survive upgrade');
+    check($access->isTimesheetsAdmin($state['userId']),
+        'Delegated administrator assignment survives upgrade');
 }
 foreach ($preferences as $key => $value) {
     check($config->getAppValue('timesheets', $key) === $value, 'Non-default setting survives upgrade: ' . $key);

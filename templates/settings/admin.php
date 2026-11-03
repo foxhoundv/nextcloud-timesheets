@@ -22,7 +22,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
     <h2><?php p($l->t('Timesheet Administration')); ?></h2>
     <p class="timesheets-intro"><?php p($l->t('Configure tracking preferences and time-recording rules for your organization.')); ?></p>
     <p><?php p($l->t('Saved settings, shift/job history, and active intervals are retained when the app is updated. After an update, reload the dashboard to see continuing timers; elapsed time includes the update period.')); ?></p>
-    <p class="timesheets-notice"><?php p($l->t('Shift tracking and job tracking can each be used independently. Enable both to configure their interaction below. Users take unpaid breaks by clocking out and starting a new shift when they return; time between shifts is not counted. There is no separate break switch or automatic deduction. End active jobs before a break. Optional rounding affects reported time only. Shift confirmations are still in development.')); ?></p>
+    <p class="timesheets-notice"><?php p($l->t('Shift tracking and job tracking can each be used independently. Enable both to configure their interaction below. Users take unpaid breaks by clocking out and starting a new shift when they return; time between shifts is not counted. There is no separate break switch or automatic deduction. End active jobs before a break. Optional rounding affects reported time only. Long-shift reminders appear after clock-out when enabled.')); ?></p>
 
     <form id="timesheets-admin-form" method="post" action="<?php p($_['saveUrl']); ?>">
         <fieldset>
@@ -136,8 +136,11 @@ foreach ($_['accessDirectory'] as $type => $entries) {
 
     <h2><?php p($l->t('User and group access')); ?></h2>
     <p class="timesheets-intro"><?php p($l->t('By default, everyone with Nextcloud app access can use enabled tracking features. Restricted mode limits new activity to assigned users and groups. It does not override Nextcloud app-level restrictions.')); ?></p>
-    <p class="timesheets-intro"><?php p($l->t('Assignments combine: a user receives each permission granted directly or by any group. An assignment without tracking permissions grants dashboard access only. Global tracking switches above still apply. Shift and job permissions can be granted independently.')); ?></p>
-    <p class="timesheets-intro"><?php p($l->t('After access is removed, users can still view their own saved shift/job history and finish active intervals, but cannot start new shifts or jobs. Nextcloud administrators always manage these settings; assignments do not grant administration rights.')); ?></p>
+    <p class="timesheets-intro"><?php p($l->t('Assignments combine: a user receives each tracking permission granted directly or by any group. An assignment without tracking permissions grants dashboard access only. Timesheets administration is a separate permission that applies even when restricted tracking access is off.')); ?></p>
+    <p class="timesheets-intro"><?php p($l->t('After tracking access is removed, users can still view their own saved shift/job history and finish active intervals, but cannot start new shifts or jobs. Nextcloud administrators always retain Timesheets administration. Only Nextcloud administrators can add or remove delegated Timesheets administrators.')); ?></p>
+    <?php if (!$_['canManageAdminAssignments']): ?>
+        <p class="timesheets-notice"><?php p($l->t('You can manage tracking preferences and access grants, but delegated administrator assignments are read-only.')); ?></p>
+    <?php endif; ?>
     <form id="timesheets-access-form" method="post" action="<?php p($_['accessSaveUrl']); ?>">
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">
@@ -170,17 +173,18 @@ foreach ($_['accessDirectory'] as $type => $entries) {
             <p id="timesheets-selection-status" role="status" aria-live="polite"></p>
         </fieldset>
         <h3 id="timesheets-access-heading"><?php p($l->t('Groups/Users With Access')); ?></h3>
-        <p><?php p($l->t('Assignments apply only in restricted mode. Use the x button to remove an entry and return it to the selection list.')); ?></p>
-        <ul id="timesheets-access-grants" aria-labelledby="timesheets-access-heading">
+        <p><?php p($l->t('Tracking permissions apply in restricted mode. Timesheets administration is independent of that mode. Use the x button to remove an entry and return it to the selection list.')); ?></p>
+        <ul id="timesheets-access-grants" aria-labelledby="timesheets-access-heading" data-can-manage-admins="<?php p($_['canManageAdminAssignments'] ? 'true' : 'false'); ?>">
                 <?php foreach ($_['accessPolicy']['grants'] as $grant): ?>
                     <?php
                     $name = $names[$grant['type']][$grant['id']] ?? $grant['id'];
                     ?>
                     <li class="timesheets-access-chip" data-type="<?php p($grant['type']); ?>" data-id="<?php p($grant['id']); ?>">
-                        <button type="button" data-remove aria-label="<?php p($l->t('Remove assignment for %s', [$name])); ?>"><span aria-hidden="true">&times;</span></button>
+                        <button type="button" data-remove aria-label="<?php p($l->t('Remove assignment for %s', [$name])); ?>" <?php echo (!$_['canManageAdminAssignments'] && $grant['admin']) ? 'disabled' : ''; ?>><span aria-hidden="true">&times;</span></button>
                         <span><?php p($l->t($grant['type'] === 'user' ? 'User' : 'Group') . ': ' . $name); ?></span>
                         <label><input type="checkbox" data-permission="shift" <?php echo $grant['shift'] ? 'checked' : ''; ?>><?php p($l->t('Shift tracking')); ?></label>
                         <label><input type="checkbox" data-permission="job" <?php echo $grant['job'] ? 'checked' : ''; ?>>                        <?php p($l->t('Job tracking')); ?></label>
+                        <label><input type="checkbox" data-permission="admin" <?php echo $grant['admin'] ? 'checked' : ''; ?> <?php echo !$_['canManageAdminAssignments'] ? 'disabled' : ''; ?>><?php p($l->t('Timesheets administration')); ?></label>
                     </li>
                 <?php endforeach; ?>
         </ul>

@@ -24,10 +24,14 @@ class AccessService {
         } catch (\DomainException $error) {
             throw new \UnexpectedValueException('The saved Timesheets access policy is invalid.', 0, $error);
         }
+        foreach ($policy['grants'] as &$grant) {
+            $grant['admin'] = $grant['admin'] ?? false;
+        }
+        unset($grant);
         return $policy;
     }
 
-    public function save(string $json): void {
+    public function save(string $json, ?string $actorId = null): void {
         try {
             $policy = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         } catch (\JsonException $error) {
@@ -39,7 +43,39 @@ class AccessService {
                 throw new \DomainException('An assigned user or group no longer exists. Remove or replace that assignment.', 400);
             }
         }
+        if ($actorId !== null) {
+            if (!$this->isTimesheetsAdmin($actorId)) {
+                throw new \DomainException('You do not have permission to manage Timesheets settings.', 403);
+            }
+            if (!$this->isNextcloudAdmin($actorId)
+                && $this->adminAssignments($policy) !== $this->adminAssignments($this->policy())) {
+                throw new \DomainException('Only Nextcloud administrators can change delegated administrator assignments.', 403);
+            }
+        }
         $this->config->setAppValue('timesheets', 'access_policy', json_encode($policy, JSON_THROW_ON_ERROR));
+    }
+
+    public function isNextcloudAdmin(string $userId): bool {
+        return $this->groups->isAdmin($userId);
+    }
+
+    public function isTimesheetsAdmin(string $userId): bool {
+        $user = $this->users->get($userId);
+        if ($user === null || !$user->isEnabled()) {
+            return false;
+        }
+        if ($this->isNextcloudAdmin($userId)) {
+            return true;
+        }
+        $groupIds = $this->groups->getUserGroupIds($user);
+        foreach ($this->policy()['grants'] as $grant) {
+            if ($grant['admin']
+                && (($grant['type'] === 'user' && $grant['id'] === $userId)
+                    || ($grant['type'] === 'group' && in_array($grant['id'], $groupIds, true)))) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public function permissions(string $userId): array {
@@ -118,7 +154,8 @@ class AccessService {
         foreach ($policy['grants'] as $grant) {
             if (!is_array($grant) || !in_array($grant['type'] ?? null, ['user', 'group'], true)
                 || !is_string($grant['id'] ?? null) || $grant['id'] === '' || strlen($grant['id']) > 255
-                || !is_bool($grant['shift'] ?? null) || !is_bool($grant['job'] ?? null)) {
+                || !is_bool($grant['shift'] ?? null) || !is_bool($grant['job'] ?? null)
+                || (array_key_exists('admin', $grant) && !is_bool($grant['admin']))) {
                 throw new \DomainException('Every assignment needs a valid user/group ID and tracking permissions.', 400);
             }
             $key = $grant['type'] . ':' . $grant['id'];
@@ -127,5 +164,16 @@ class AccessService {
             }
             $seen[$key] = true;
         }
+    }
+
+    private function adminAssignments(array $policy): array {
+        $assignments = [];
+        foreach ($policy['grants'] as $grant) {
+            if (($grant['admin'] ?? false) === true) {
+                $assignments[] = $grant['type'] . ':' . $grant['id'];
+            }
+        }
+        sort($assignments, SORT_STRING);
+        return $assignments;
     }
 }

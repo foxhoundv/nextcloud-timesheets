@@ -5,10 +5,13 @@ declare(strict_types=1);
 namespace OCA\Timesheets\Controller;
 
 use OCP\AppFramework\Controller;
+use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\JSONResponse;
 use OCP\IConfig;
 use OCP\IRequest;
 use OCP\IL10N;
+use OCP\IUserSession;
+use OCA\Timesheets\Service\AccessService;
 
 class AdminController extends Controller {
     public function __construct(
@@ -16,10 +19,13 @@ class AdminController extends Controller {
         IRequest $request,
         private IConfig $config,
         private IL10N $l,
+        private AccessService $access,
+        private IUserSession $userSession,
     ) {
         parent::__construct($appName, $request);
     }
 
+    #[NoAdminRequired]
     public function save(
         string $shift_tracking = '0',
         string $job_tracking = '0',
@@ -31,6 +37,10 @@ class AdminController extends Controller {
         ?string $shift_rounding_enabled = null,
         ?string $job_rounding_enabled = null,
     ): JSONResponse {
+        $user = $this->userSession->getUser();
+        if ($user === null || !$this->access->isTimesheetsAdmin($user->getUID())) {
+            return new JSONResponse(['message' => $this->l->t('You do not have permission to manage Timesheets settings.')], 403);
+        }
         if (($job_require_shift !== null && !in_array($job_require_shift, ['0', '1'], true))
             || ($shift_end_job_policy !== null && !in_array($shift_end_job_policy, ['block', 'allow'], true))) {
             return new JSONResponse(['message' => $this->l->t('Choose valid shift/job interaction settings.')], 400);

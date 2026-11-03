@@ -16,6 +16,9 @@ $entries = $_['entries'];
             <p><?php p($l->t('Your work time at a glance. Review your saved shifts and see what is still open.')); ?></p>
         </div>
         <a class="timesheets-text-link" href="#timesheets-history"><?php p($l->t('View shift history')); ?></a>
+        <?php if ($_['canManageSettings']): ?>
+            <a class="timesheets-text-link" href="<?php p($_['adminSettingsUrl']); ?>"><?php p($l->t('Timesheet Administration')); ?></a>
+        <?php endif; ?>
     </header>
 
     <section id="timesheets-long-shift-confirmation" class="timesheets-notice" role="status" aria-live="polite" tabindex="-1" hidden>

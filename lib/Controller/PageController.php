@@ -71,6 +71,8 @@ class PageController extends Controller {
             'jobEntries' => $this->jobEntries($jobs, $userId),
             'jobClockInUrl' => $this->urlGenerator->linkToRoute('timesheets.job.clockIn'),
             'jobClockOutUrl' => $this->urlGenerator->linkToRoute('timesheets.job.clockOut'),
+            'canManageSettings' => $user !== null && $this->access->isTimesheetsAdmin($userId),
+            'adminSettingsUrl' => $this->urlGenerator->linkToRoute('timesheets.adminpage.index'),
         ]);
     }
 

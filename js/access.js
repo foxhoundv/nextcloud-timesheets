@@ -93,13 +93,15 @@
             const heading = document.createElement('span');
             heading.textContent = t('timesheets', activeType === 'user' ? 'User' : 'Group') + ': ' + name;
             chip.append(remove, heading);
-            for (const permission of ['shift', 'job']) {
+            for (const permission of ['shift', 'job', 'admin']) {
                 const label = document.createElement('label');
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
                 checkbox.dataset.permission = permission;
+                checkbox.disabled = permission === 'admin' && grants.dataset.canManageAdmins !== 'true';
                 label.append(checkbox, document.createTextNode(t('timesheets',
-                    permission === 'shift' ? 'Shift tracking' : 'Job tracking')));
+                    permission === 'shift' ? 'Shift tracking'
+                        : permission === 'job' ? 'Job tracking' : 'Timesheets administration')));
                 chip.append(label);
             }
             grants.append(chip);
@@ -128,6 +130,7 @@
                     id: chip.dataset.id,
                     shift: chip.querySelector('[data-permission="shift"]').checked,
                     job: chip.querySelector('[data-permission="job"]').checked,
+                    admin: chip.querySelector('[data-permission="admin"]').checked,
                 })),
             };
             saving = true;

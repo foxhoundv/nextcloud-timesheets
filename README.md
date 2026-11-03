@@ -11,13 +11,14 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 
 ## App versioning
 
-Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `0.2.1` follows this format.
+Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `0.3.1` follows this format.
 
 Before changing the app version for an update, ask the project owner whether it is a **Major**, **Minor**, or **Sub-minor** change; do not choose a level or bump the version without that answer. Increment the selected component and reset any lower-order components to 1: a sub-minor update changes only the last component, a minor update resets Sub-minor to 1, and a major update resets Minor and Sub-minor to 1. For example, `0.1.15` to `0.1.16` is Sub-minor, `0.1.99` to `0.2.1` is Minor, and `0.9.99` to `1.1.1` is Major.
 
 ## Product rules
 
-- Administrators grant app access to individual Nextcloud users and groups, assign admin rights, configure storage roots, and set global rounding and shift-length rules.
+- Nextcloud administrators grant Timesheets administration to individual users or groups. Delegated administrators can manage Timesheets settings and tracking access, but cannot add or remove delegated administrators. Nextcloud administrators always retain access.
+- Administrators grant app access to individual Nextcloud users and groups, configure storage roots, and set global rounding and shift-length rules.
 - Per employee, administrators enable shift tracking, job tracking, or both.
 - Shift tracking and job tracking can each operate independently. Enabling both reveals additional settings governing their interaction.
 - Administrators choose whether shift clock-out is blocked by an active job (default) or allowed while leaving the job running. Requiring an active shift for job clock-in is optional and defaults off; it applies only to users with both tracking permissions when both global modes are enabled.
@@ -68,15 +69,17 @@ Version 0.1.9 adds **User and group access** in Timesheet Administration. Existi
 
 In version 0.1.11, use the **Groups** and **Users** tabs to select an entry, then choose **Add** at the bottom of the selection area. The complete lists refresh on every administration-page load and are alphabetized by group name or user account name (not user display name). Already-assigned entries are hidden from the available lists.
 
-Selected entries appear as chips under **Groups/Users With Access**, with an x removal button at the beginning and **Shift tracking** / **Job tracking** checkboxes alongside. Removing a chip returns an existing account/group to its alphabetized selection list. Choose either permission, both, or neither (dashboard access only). Enable **Restrict access to assigned users and groups**, then select **Save access settings**. Add/remove/permission edits are not applied until saved. Assignments are saved separately from the global tracking preferences. They take effect only in restricted mode; disabling restricted mode restores existing access without deleting assignments.
+Selected entries appear as chips under **Groups/Users With Access**, with an x removal button at the beginning and **Shift tracking** / **Job tracking** checkboxes alongside. Nextcloud administrators also see a **Timesheets administration** checkbox for each entry. Adding that permission delegates Timesheets settings administration; it does not grant Nextcloud administrator rights. Delegated administrators can change tracking and access settings, but cannot grant or revoke Timesheets administration. Nextcloud administrators always retain access. Removing a chip returns an existing account/group to its alphabetized selection list. Add/remove/permission edits are not applied until saved. Choose either tracking permission, both, or neither (dashboard access only). Enable **Restrict access to assigned users and groups**, then select **Save access settings**. Tracking assignments apply only in restricted mode; delegated administration is independent of it. Disabling restricted mode restores tracking access without deleting assignments.
 
-Permissions are additive across direct assignments and all current group memberships. A false checkbox does not deny a permission granted elsewhere. Global shift/job switches remain independent master switches. Assignments do not grant administration rights; Nextcloud administrators always manage settings.
+Permissions are additive across direct assignments and all current group memberships. A false checkbox does not deny a tracking permission granted elsewhere. Global shift/job switches remain independent master switches.
+
+Nextcloud administrators use **Administration settings > Timesheets**. Delegated administrators open **Timesheet Administration** from the Timesheets dashboard. Both settings entry points use the same permission checks on the server; direct HTTP requests cannot bypass delegated-admin restrictions.
 
 Removing assignments or group membership prevents new clock-ins when no remaining grant allows them. Users retain access to their own saved history and can finish an already-open shift; users without an assignment or history receive an explicit access-required page. The menu entry may remain visible, but server-side permissions govern dashboard and API access. Disabling an account or revoking app access through Nextcloud itself can still prevent sign-in/app access, including clock-out.
 
 Access policy is stored in Nextcloud app configuration, not app files, and survives updates along with tracking preferences and time logs. Invalid assignment targets or malformed policies are rejected without replacing the saved configuration.
 
-On the testing server, run `php apps/timesheets/tests/access.php /path/to/nextcloud` for additive grants, group membership, read-only history, revocation, and invalid-input regression checks. It temporarily changes global access/shift preferences and restores them and deletes its fixtures afterwards; run only when testing users are idle. The entry-point suite also tests HTTP authorization, CSRF, directory-search restrictions, and clock-out after revocation.
+On the testing server, run `php apps/timesheets/tests/access.php /path/to/nextcloud` for additive grants, group membership, delegated-administrator roles, read-only history, revocation, and invalid-input regression checks. It temporarily changes global access/shift preferences and restores them and deletes its fixtures afterwards; run only when testing users are idle. The entry-point suite also tests user/group delegation, HTTP authorization, immutable delegated-admin assignments, CSRF, directory-search restrictions, and clock-out after revocation.
 
 ### Clocking in and out
 
@@ -209,7 +212,7 @@ The existing `.gitignore` rules exclude `.env` from Git. Keep real credentials o
 
 ## Development status
 
-This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time and optional saved rounding, configurable shift/job interaction, completed-shift job/shop breakdowns, post-clock-out long-shift reminders, unpaid breaks as gaps between separate shifts, and opt-in user/group access and tracking grants. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Delegated administration, storage integration, printable views, and workbook generation are planned next.
+This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time and optional saved rounding, configurable shift/job interaction, completed-shift job/shop breakdowns, post-clock-out long-shift reminders, unpaid breaks as gaps between separate shifts, user/group tracking grants, and delegated Timesheets administration. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Storage integration, printable views, and workbook generation are planned next.
 
 ## Longer-term direction
 

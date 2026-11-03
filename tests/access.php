@@ -70,6 +70,8 @@ try {
     savePolicy(true, [$grant]);
     check($access->permissions($id) === ['access' => true, 'shift' => false, 'job' => false],
         'Dashboard-only access grants no tracking permission');
+    check($access->policy()['grants'][0]['admin'] === false,
+        'Legacy tracking assignments default to no delegated administration');
     $grant['job'] = true;
     savePolicy(true, [$grant]);
     check($access->permissions($id) === ['access' => true, 'shift' => false, 'job' => true],
@@ -84,6 +86,34 @@ try {
     $group->addUser($user);
     check($access->permissions($id) === ['access' => true, 'shift' => true, 'job' => false],
         'Membership grants shift-only permission');
+    $groupAdminGrant = ['type' => 'group', 'id' => $group->getGID(),
+        'shift' => false, 'job' => false, 'admin' => true];
+    savePolicy(true, [$groupAdminGrant]);
+    check($access->isTimesheetsAdmin($id),
+        'Group assignment grants Timesheets administration independently of tracking permissions');
+    savePolicy(false, [$groupAdminGrant]);
+    check($access->isTimesheetsAdmin($id),
+        'Delegated administration is independent of restricted tracking mode');
+    $directAdminGrant = ['type' => 'user', 'id' => $id,
+        'shift' => false, 'job' => false, 'admin' => true];
+    savePolicy(true, [$directAdminGrant]);
+    check($access->isTimesheetsAdmin($id),
+        'Direct assignment grants Timesheets administration');
+    $delegatedPolicy = json_encode(['restricted' => true, 'grants' => [
+        array_merge($directAdminGrant, ['shift' => true]),
+    ]], JSON_THROW_ON_ERROR);
+    $access->save($delegatedPolicy, $id);
+    check($access->permissions($id)['shift'], 'Delegated administrators can manage tracking grants');
+    $beforeDeniedDelegationChange = $config->getAppValue('timesheets', 'access_policy');
+    try {
+        $access->save(json_encode(['restricted' => true, 'grants' => []], JSON_THROW_ON_ERROR), $id);
+        throw new LogicException('Delegated administrator changed administrator assignments');
+    } catch (DomainException $error) {
+        check($error->getCode() === 403
+            && $config->getAppValue('timesheets', 'access_policy') === $beforeDeniedDelegationChange,
+            'Delegated administrator cannot remove delegated administrator assignments');
+    }
+    savePolicy(true, [$grant, $groupGrant, $otherGrant]);
     $otherGroup->addUser($user);
     check($access->permissions($id) === ['access' => true, 'shift' => true, 'job' => true],
         'Permissions combine across multiple groups');
@@ -117,13 +147,16 @@ try {
     check($clock->current($id) === null && count($page->index()->getParams()['entries']) === 1,
         'Revoked user can close an active shift and continue viewing history');
     $user->setEnabled(false);
-    savePolicy(false, []);
+    savePolicy(false, [$directAdminGrant]);
     check(!$access->permissions($id)['access'], 'Disabled accounts do not receive unrestricted permission');
+    check(!$access->isTimesheetsAdmin($id), 'Disabled accounts cannot use delegated administration');
     $user->setEnabled(true);
+    savePolicy(false, []);
     check(!$access->permissions($id . '-missing')['access'], 'Unknown accounts receive no permission');
     foreach ([null, ['restricted' => 'true', 'grants' => []],
         ['restricted' => true, 'grants' => [$grant, $grant]],
         ['restricted' => true, 'grants' => [array_merge($grant, ['shift' => '1'])]],
+        ['restricted' => true, 'grants' => [array_merge($grant, ['admin' => '1'])]],
         ['restricted' => true, 'grants' => [array_merge($grant, ['type' => 'admin'])]],
         ['restricted' => true, 'grants' => [array_merge($grant, ['id' => $id . '-missing'])]],
     ] as $invalid) {
