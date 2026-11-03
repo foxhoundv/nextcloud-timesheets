@@ -30,6 +30,11 @@
                     body: new URLSearchParams(new FormData(form)).toString(),
                 });
 
+                if (response.status === 400) {
+                    const data = await response.json();
+                    status.textContent = data.message || t('timesheets', 'Choose valid settings before saving.');
+                    return;
+                }
                 if (!response.ok) {
                     throw new Error('Settings request failed: ' + response.status);
                 }

@@ -32,7 +32,8 @@ $group = null;
 $otherGroup = null;
 $mapper = new ShiftMapper($db);
 $clock = new ShiftClockService($mapper, $config, Server::get(ITimeFactory::class), $access,
-    Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
+    Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
+    Server::get(\OCA\Timesheets\Service\RoundingService::class));
 
 function savePolicy(bool $restricted, array $grants): void {
     global $access;

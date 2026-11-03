@@ -52,7 +52,7 @@ check(count(array_filter($settings, static fn ($setting) => $setting instanceof 
 
 $config = Server::get(IConfig::class);
 $keys = ['shift_tracking', 'job_tracking', 'shift_rounding', 'job_rounding', 'net_shift_threshold',
-    'job_require_shift', 'shift_end_job_policy'];
+    'job_require_shift', 'shift_end_job_policy', 'shift_rounding_enabled', 'job_rounding_enabled'];
 $originalValues = [];
 $existingKeys = $config->getAppKeys('timesheets');
 foreach ($keys as $key) {
@@ -213,7 +213,7 @@ try {
     $historyDocument = pageDocument($history['body']);
     $historyPath = new DOMXPath($historyDocument);
     $values = $historyPath->query('//*[@id="timesheets"]//*[contains(concat(" ", normalize-space(@class), " "), " timesheets-stat-value ")]');
-    check($values->length === 5 && trim($values->item(0)->textContent) === '2h 05m'
+    check($values->length === 8 && trim($values->item(0)->textContent) === '2h 05m'
         && trim($values->item(1)->textContent) === '1' && trim($values->item(2)->textContent) === '1',
         'Overview shows all-date completed time and completed/open counts without including open durations');
     check($historyPath->query('//*[@id="timesheets-history"]//tbody/tr')->length === 2,
@@ -329,6 +329,8 @@ try {
         'net_shift_threshold' => '480',
         'job_require_shift' => '0',
         'shift_end_job_policy' => 'block',
+        'shift_rounding_enabled' => '1',
+        'job_rounding_enabled' => '0',
     ];
     $denied = request('/index.php/apps/timesheets/settings', $payload);
     check($denied['status'] === 412, 'Settings save rejects requests without a CSRF token');
@@ -353,6 +355,23 @@ try {
         'Unknown shift/job policy is explicitly rejected');
     check(request('/index.php/apps/timesheets/settings', ['job_require_shift' => 'invalid'], $token)['status'] === 400,
         'Invalid shift requirement is explicitly rejected');
+    foreach ([
+        ['shift_rounding' => '12', 'shift_tracking' => '0'],
+        ['job_rounding' => '0'],
+        ['shift_rounding_enabled' => 'yes'],
+        ['job_rounding_enabled' => '2'],
+    ] as $invalid) {
+        check(request('/index.php/apps/timesheets/settings', $invalid, $token)['status'] === 400,
+            'Malformed rounding preference is explicitly rejected before any settings are saved');
+    }
+    check(request('/index.php/apps/timesheets/settings', [
+        'shift_tracking' => '1', 'job_tracking' => '1', 'shift_rounding' => '5', 'job_rounding' => '30',
+    ], $token)['status'] === 200, 'Older settings payload can omit rounding enable switches');
+    $roundingAdmin = request('/index.php/settings/admin/timesheets');
+    $roundingPath = new DOMXPath(pageDocument($roundingAdmin['body']));
+    check($roundingPath->query('//select[@id="shift_rounding_enabled"]/option[@selected and @value="1"]')->length === 1
+        && $roundingPath->query('//select[@id="job_rounding_enabled"]/option[@selected and @value="0"]')->length === 1,
+        'Omitted rounding switches preserve independently saved enable states');
     $jobInPath = '/index.php/apps/timesheets/api/v1/jobs/clock-in';
     $jobOutPath = '/index.php/apps/timesheets/api/v1/jobs/clock-out';
     $adminGroup->removeUser($user);

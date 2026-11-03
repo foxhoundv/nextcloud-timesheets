@@ -47,7 +47,7 @@ $entries = $_['entries'];
         <?php endif; ?>
         <p class="timesheets-clock-help"><?php p($l->t('Taking a break? Clock out when your break starts, then clock in again when you return. Each work period is a separate shift; time between shifts is excluded from recorded work time.')); ?></p>
         <p class="timesheets-clock-help"><?php p($l->t('There is no paused shift or automatic break deduction. Time while clocked in counts as work. Starting again requires shift tracking and your shift permission to remain enabled.')); ?></p>
-        <p class="timesheets-clock-help"><?php p($l->t('Actual elapsed time is saved using the server clock. Rounding and long-shift confirmations are not available yet. End active jobs before taking an unpaid break; a job left running continues recording time even outside a shift.')); ?></p>
+        <p class="timesheets-clock-help"><?php p($l->t('Actual elapsed time is saved using the server clock. Optional rounding is saved separately using the settings at clock-out. Long-shift confirmations are not available yet. End active jobs before taking an unpaid break; a job left running continues recording time even outside a shift.')); ?></p>
     </section>
 
     <section class="timesheets-notice" aria-labelledby="timesheets-job-title">
@@ -88,6 +88,7 @@ $entries = $_['entries'];
 
     <section aria-labelledby="timesheets-overview">
         <h2 id="timesheets-overview"><?php p($l->t('Your overview')); ?></h2>
+        <p class="timesheets-intro"><?php p($l->t('Reported time uses the rounding rule saved when each interval ended: nearest interval, exact halfway up. Off uses actual time. Older records with no captured rule also use actual time and are labeled below. Settings changes never recalculate completed history. Totals sum seconds before displaying whole minutes. Actual job/shop calculations are not rounded.')); ?></p>
         <p class="timesheets-intro"><?php p($l->t('Job and shop totals include completed shifts only. Jobs outside shifts and breaks do not count toward these totals. An active job contributes only the part inside a completed shift. Calculations use exact seconds; each displayed duration shows whole minutes, so displayed parts can differ from the total by a minute. Reload to see newly saved intervals.')); ?></p>
         <?php if ($_['breakdown']['unavailableShifts'] > 0): ?>
             <p class="timesheets-intro"><?php p($l->t('%s completed shifts lack recorded start or end times. Their saved duration is retained in Recorded time, but their job/shop breakdown is unavailable and excluded from job/shop totals.', [(string) $_['breakdown']['unavailableShifts']])); ?></p>
@@ -123,6 +124,8 @@ $entries = $_['entries'];
                         <th scope="col"><?php p($l->t('Recorded duration')); ?></th>
                         <th scope="col"><?php p($l->t('Job time in shift')); ?></th>
                         <th scope="col"><?php p($l->t('Shop time')); ?></th>
+                        <th scope="col"><?php p($l->t('Reported duration')); ?></th>
+                        <th scope="col"><?php p($l->t('Saved rounding rule')); ?></th>
                         <th scope="col"><?php p($l->t('Status')); ?></th>
                     </tr>
                 </thead>
@@ -135,6 +138,8 @@ $entries = $_['entries'];
                             <td class="timesheets-duration"><?php p($entry['total'] ?? $l->t('Not finalized')); ?></td>
                             <td class="timesheets-duration"><?php p($entry['jobTime'] ?? $l->t($entry['isOpen'] ? 'Not finalized' : 'Unavailable')); ?></td>
                             <td class="timesheets-duration"><?php p($entry['shopTime'] ?? $l->t($entry['isOpen'] ? 'Not finalized' : 'Unavailable')); ?></td>
+                            <td class="timesheets-duration"><?php p($entry['reported'] ?? $l->t('Not finalized')); ?></td>
+                            <td><?php p($entry['isOpen'] ? $l->t('Set at clock-out') : ($entry['roundingInterval'] === null ? $l->t('Not captured (actual)') : ($entry['roundingInterval'] === 0 ? $l->t('Off (actual)') : $l->t('Nearest %s minutes; halfway up', [(string) $entry['roundingInterval']])))); ?></td>
                             <td>
                                 <span class="timesheets-status <?php echo $entry['isOpen'] ? 'open' : 'closed'; ?>">
                                     <?php p($l->t($entry['status'])); ?>
@@ -154,13 +159,15 @@ $entries = $_['entries'];
         <?php else: ?>
             <div class="timesheets-table-wrap" role="region" aria-label="<?php p($l->t('Job history table')); ?>" tabindex="0">
             <table>
-                <caption><?php p($l->t('Your job intervals, newest first. Completed durations show whole minutes without rounding.')); ?></caption>
+                <caption><?php p($l->t('Your job intervals, newest first. Actual and reported durations are separate and show whole minutes.')); ?></caption>
                 <thead><tr>
                     <th scope="col"><?php p($l->t('Job reference')); ?></th>
                     <th scope="col"><?php p($l->t('Start date')); ?></th>
                     <th scope="col"><?php p($l->t('Started')); ?></th>
                     <th scope="col"><?php p($l->t('Ended')); ?></th>
-                    <th scope="col"><?php p($l->t('Duration')); ?></th>
+                    <th scope="col"><?php p($l->t('Actual duration')); ?></th>
+                    <th scope="col"><?php p($l->t('Reported duration')); ?></th>
+                    <th scope="col"><?php p($l->t('Saved rounding rule')); ?></th>
                 </tr></thead>
                 <tbody>
                 <?php foreach ($_['jobEntries'] as $entry): ?>
@@ -170,6 +177,8 @@ $entries = $_['entries'];
                         <td><?php p($entry['clockIn']); ?></td>
                         <td><?php p($entry['clockOut'] ?? $l->t('In progress')); ?></td>
                         <td><?php p($entry['total'] ?? $l->t('Not finalized')); ?></td>
+                        <td><?php p($entry['reported'] ?? $l->t('Not finalized')); ?></td>
+                        <td><?php p($entry['clockOut'] === null ? $l->t('Set at clock-out') : ($entry['roundingInterval'] === null ? $l->t('Not captured (actual)') : ($entry['roundingInterval'] === 0 ? $l->t('Off (actual)') : $l->t('Nearest %s minutes; halfway up', [(string) $entry['roundingInterval']])))); ?></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

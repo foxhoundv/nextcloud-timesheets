@@ -20,6 +20,7 @@ class JobClockService {
         private IConfig $config,
         private ITimeFactory $time,
         private ClockTransaction $transaction,
+        private RoundingService $rounding,
     ) {
     }
 
@@ -91,7 +92,8 @@ class JobClockService {
             if ($seconds < 0) {
                 throw new \RuntimeException('The server clock is earlier than the job start. The job was not changed.');
             }
-            if (!$this->jobs->closeJob($job, $now->format('Y-m-d H:i:s'), $seconds)) {
+            $rounding = $this->rounding->capture('job', $seconds);
+            if (!$this->jobs->closeJob($job, $now->format('Y-m-d H:i:s'), $seconds, $rounding['interval'], $rounding['seconds'])) {
                 throw new \DomainException('This job interval was changed by another request. Refresh the page.', 409);
             }
         });

@@ -10,6 +10,8 @@ use OCA\Timesheets\Service\AccessService;
 use OCA\Timesheets\Service\JobClockService;
 use OCA\Timesheets\Service\ShopTimeService;
 use OCA\Timesheets\Db\JobMapper;
+use OCA\Timesheets\Db\Job;
+use OCA\Timesheets\Db\Shift;
 use OCP\AppFramework\Controller;
 use OCP\AppFramework\Http\Attribute\NoAdminRequired;
 use OCP\AppFramework\Http\Attribute\NoCSRFRequired;
@@ -49,7 +51,7 @@ class PageController extends Controller {
             return $response;
         }
         $breakdown = $this->shopTime->calculate($shifts, $jobs);
-        $stats = $this->buildStats($shifts, $breakdown);
+        $stats = $this->buildStats($shifts, $jobs, $breakdown);
 
         $entries = $this->buildEntries($shifts, $userId, $breakdown['shifts']);
 
@@ -83,13 +85,18 @@ class PageController extends Controller {
                 'clockIn' => $this->clock->parseTimestamp($job->getClockIn())->setTimezone($zone)->format('Y-m-d H:i:s T'),
                 'clockOut' => $open ? null : $this->clock->parseTimestamp($job->getClockOut())->setTimezone($zone)->format('Y-m-d H:i:s T'),
                 'total' => $open ? null : $this->formatMinutes(intdiv($job->getDurationSeconds(), 60)),
+                'reported' => $open ? null : $this->formatMinutes(intdiv($this->reportedSeconds($job, $job->getDurationSeconds()), 60)),
+                'roundingInterval' => $open ? null : $job->getRoundingInterval(),
             ];
         }
         return $entries;
     }
 
-    private function buildStats(array $shifts, array $breakdown): array {
+    private function buildStats(array $shifts, array $jobs, array $breakdown): array {
         $recordedSeconds = 0;
+        $reportedShiftSeconds = 0;
+        $recordedJobSeconds = 0;
+        $reportedJobSeconds = 0;
         $completedShiftCount = 0;
         $openShiftCount = 0;
 
@@ -103,6 +110,13 @@ class PageController extends Controller {
             } else {
                 $completedShiftCount++;
                 $recordedSeconds += $duration;
+                $reportedShiftSeconds += $this->reportedSeconds($shift, $duration);
+            }
+        }
+        foreach ($jobs as $job) {
+            if ($job->getClockOut() !== null) {
+                $recordedJobSeconds += $job->getDurationSeconds();
+                $reportedJobSeconds += $this->reportedSeconds($job, $job->getDurationSeconds());
             }
         }
 
@@ -112,6 +126,9 @@ class PageController extends Controller {
             ['label' => 'Open shifts', 'value' => (string) $openShiftCount, 'description' => 'Shifts that have not been closed.'],
             ['label' => 'Job time in shifts', 'value' => $this->formatMinutes(intdiv($breakdown['jobSeconds'], 60)), 'description' => 'Job time overlapping completed shifts with recorded start and end times, across all dates.'],
             ['label' => 'Shop time', 'value' => $this->formatMinutes(intdiv($breakdown['shopSeconds'], 60)), 'description' => 'Time in completed shifts with recorded start and end times that was not spent on jobs, across all dates.'],
+            ['label' => 'Reported shift time', 'value' => $this->formatMinutes(intdiv($reportedShiftSeconds, 60)), 'description' => 'Completed shifts using each saved rounding rule; actual time where rounding was off or no rule was captured.'],
+            ['label' => 'Recorded job time', 'value' => $this->formatMinutes(intdiv($recordedJobSeconds, 60)), 'description' => 'Actual duration of completed jobs, including time outside shifts. Do not add to shift time.'],
+            ['label' => 'Reported job time', 'value' => $this->formatMinutes(intdiv($reportedJobSeconds, 60)), 'description' => 'Completed jobs using each saved rounding rule, including time outside shifts; actual time where no rounding applies.'],
         ];
     }
 
@@ -133,6 +150,9 @@ class PageController extends Controller {
             $entries[] = [
                 'date' => (string) ($shift->getShiftDate() ?? '—'),
                 'total' => $status === 'open' ? null : $this->formatMinutes($durationMinutes),
+                'reported' => $status === 'open' ? null : $this->formatMinutes(intdiv($this->reportedSeconds($shift,
+                    $breakdown['totalSeconds'] ?? $shift->getDurationSeconds() ?? $durationMinutes * 60), 60)),
+                'roundingInterval' => $status === 'open' ? null : $shift->getRoundingInterval(),
                 'status' => $status === 'open' ? 'In progress' : 'Closed',
                 'isOpen' => $status === 'open',
                 'jobTime' => $breakdown === null ? null : $this->formatMinutes(intdiv($breakdown['jobSeconds'], 60)),
@@ -143,6 +163,18 @@ class PageController extends Controller {
         }
 
         return $entries;
+    }
+
+    private function reportedSeconds(Shift|Job $interval, int $actual): int {
+        $rule = $interval->getRoundingInterval();
+        $seconds = $interval->getRoundedSeconds();
+        if ($rule === null && $seconds === null) {
+            return $actual;
+        }
+        if (!in_array($rule, [0, 5, 10, 15, 30], true) || $seconds === null || $seconds < 0) {
+            throw new \RuntimeException('An interval has invalid saved rounding data. Ask an administrator to review it.');
+        }
+        return $seconds;
     }
 
     private function formatMinutes(int $minutes): string {

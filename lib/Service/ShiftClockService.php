@@ -21,6 +21,7 @@ class ShiftClockService {
         private AccessService $access,
         private ClockTransaction $transaction,
         private JobMapper $jobs,
+        private RoundingService $rounding,
     ) {
     }
 
@@ -99,7 +100,8 @@ class ShiftClockService {
         if ($seconds < 0) {
             throw new \RuntimeException('The server clock is earlier than the shift start. The shift was not changed.');
         }
-        if (!$this->shiftMapper->closeShift($shift, $now->format('Y-m-d H:i:s'), $seconds)) {
+        $rounding = $this->rounding->capture('shift', $seconds);
+        if (!$this->shiftMapper->closeShift($shift, $now->format('Y-m-d H:i:s'), $seconds, $rounding['interval'], $rounding['seconds'])) {
             throw new \DomainException('This shift was changed by another request. Refresh the page.', 409);
         }
     }

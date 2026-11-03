@@ -78,7 +78,8 @@ $db = Server::get(IDBConnection::class);
 $mapper = new ShiftMapper($db);
 $access = Server::get(\OCA\Timesheets\Service\AccessService::class);
 $clock = new ShiftClockService($mapper, $config, Server::get(ITimeFactory::class), $access,
-    Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
+    Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
+    Server::get(\OCA\Timesheets\Service\RoundingService::class));
 $preferences = [
     'shift_tracking' => '1',
     'job_tracking' => '1',
@@ -149,6 +150,16 @@ if ($phase === 'prepare') {
     $config->setAppValue('timesheets', 'shift_end_job_policy', 'allow');
     $state['combined'] = ['job_require_shift' => '1', 'shift_end_job_policy' => 'allow'];
     $state['shifts'] = array_map('snapshot', $mapper->findByUser($state['userId']));
+    $state['roundingSnapshots'] = [
+        'shifts' => array_map(static fn ($entry): array => [$entry->getId(), $entry->getRoundingInterval(), $entry->getRoundedSeconds()],
+            $mapper->findByUser($state['userId'])),
+        'jobs' => array_map(static fn ($entry): array => [$entry->getId(), $entry->getRoundingInterval(), $entry->getRoundedSeconds()],
+            Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($state['userId'])),
+        'settings' => [
+            'shift_rounding_enabled' => $config->getAppValue('timesheets', 'shift_rounding_enabled', '0'),
+            'job_rounding_enabled' => $config->getAppValue('timesheets', 'job_rounding_enabled', '0'),
+        ],
+    ];
     $state['active'] = $clock->current($state['userId']);
     $json = json_encode($state, JSON_THROW_ON_ERROR);
     check(file_put_contents($stateFile, $json, LOCK_EX) === strlen($json),
@@ -230,6 +241,21 @@ check($settings->getForm()->getParams()['settings'] === [
 ], 'Administration page still receives every non-default setting');
 check(array_map('snapshot', $mapper->findByUser($state['userId'])) === $state['shifts'],
     'Historical and active shift fields are unchanged by upgrade');
+foreach ([
+    'shifts' => $mapper->findByUser($state['userId']),
+    'jobs' => Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($state['userId']),
+] as $kind => $intervals) {
+    $snapshots = array_map(static fn ($entry): array => [$entry->getId(), $entry->getRoundingInterval(), $entry->getRoundedSeconds()], $intervals);
+    if (isset($state['roundingSnapshots'])) {
+        check($snapshots === $state['roundingSnapshots'][$kind], 'Saved rounding snapshots survive upgrade: ' . $kind);
+    } else {
+        check(count(array_filter($snapshots, static fn (array $row): bool => $row[1] !== null || $row[2] !== null)) === 0,
+            'Pre-rounding historical and active intervals retain null snapshots: ' . $kind);
+    }
+}
+foreach ($state['roundingSnapshots']['settings'] ?? ['shift_rounding_enabled' => '0', 'job_rounding_enabled' => '0'] as $key => $value) {
+    check($config->getAppValue('timesheets', $key, '0') === $value, 'Rounding enable preference preserved without implicit activation: ' . $key);
+}
 $active = $clock->current($state['userId']);
 check($active !== null && $active['id'] === $state['active']['id']
     && $active['clockIn'] === $state['active']['clockIn']

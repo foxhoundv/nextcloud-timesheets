@@ -28,11 +28,13 @@ class JobMapper extends QBMapper {
         return $this->findEntities($qb)[0] ?? null;
     }
 
-    public function closeJob(Job $job, string $clockOut, int $seconds): bool {
+    public function closeJob(Job $job, string $clockOut, int $seconds, int $roundingInterval, int $roundedSeconds): bool {
         $qb = $this->db->getQueryBuilder();
         $qb->update($this->getTableName())
             ->set('clock_out', $qb->createNamedParameter($clockOut))
             ->set('duration_seconds', $qb->createNamedParameter($seconds, IQueryBuilder::PARAM_INT))
+            ->set('rounding_interval', $qb->createNamedParameter($roundingInterval, IQueryBuilder::PARAM_INT))
+            ->set('rounded_seconds', $qb->createNamedParameter($roundedSeconds, IQueryBuilder::PARAM_INT))
             ->set('open_user_id', $qb->createNamedParameter(null, IQueryBuilder::PARAM_NULL))
             ->where($qb->expr()->eq('id', $qb->createNamedParameter($job->getId(), IQueryBuilder::PARAM_INT)))
             ->andWhere($qb->expr()->eq('user_id', $qb->createNamedParameter($job->getUserId())))

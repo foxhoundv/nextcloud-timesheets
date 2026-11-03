@@ -30,6 +30,8 @@ class AdminSettings implements ISettings {
         return new TemplateResponse('timesheets', 'settings/admin', [
             'settings' => $settings,
             'saveUrl' => $this->urlGenerator->linkToRoute('timesheets.admin.save'),
+            'shiftRoundingEnabled' => $this->config->getAppValue('timesheets', 'shift_rounding_enabled', '0') === '1',
+            'jobRoundingEnabled' => $this->config->getAppValue('timesheets', 'job_rounding_enabled', '0') === '1',
             'accessPolicy' => $this->access->policy(),
             'jobRequireShift' => $this->config->getAppValue('timesheets', 'job_require_shift', '0') === '1',
             'shiftEndJobPolicy' => $this->config->getAppValue('timesheets', 'shift_end_job_policy', 'block'),

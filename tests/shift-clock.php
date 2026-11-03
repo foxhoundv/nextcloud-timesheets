@@ -41,7 +41,8 @@ $user = Server::get(IUserManager::class)->createUser($testUserId, bin2hex(random
 check($user !== false, 'Clock test account created');
 $mapper = new ShiftMapper($db);
 $service = new ShiftClockService($mapper, $config, $clock, Server::get(\OCA\Timesheets\Service\AccessService::class),
-    Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class));
+    Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
+    Server::get(\OCA\Timesheets\Service\RoundingService::class));
 $saved = [];
 
 function expectConflict(callable $action, int $code, string $message): void {
@@ -104,7 +105,7 @@ try {
         $byId[$entry->getId()] = $entry;
     }
     check($byId[$next->getId()]->getDurationSeconds() === 7200, 'Daylight-saving clock change retains the full actual duration');
-    check(!$mapper->closeShift($next, '2026-11-01 11:30:00', 10800),
+    check(!$mapper->closeShift($next, '2026-11-01 11:30:00', 10800, 0, 10800),
         'Conditional update prevents a concurrent or repeated close from overwriting duration');
     check($service->current($testUserId) === null, 'No active shift remains after clock-out');
 

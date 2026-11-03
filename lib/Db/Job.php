@@ -15,8 +15,12 @@ class Job extends Entity {
     protected $durationSeconds;
     protected $timeZone;
     protected $openUserId;
+    protected $roundingInterval;
+    protected $roundedSeconds;
 
     public function __construct() {
         $this->addType('durationSeconds', 'integer');
+        $this->addType('roundingInterval', 'integer');
+        $this->addType('roundedSeconds', 'integer');
     }
 }

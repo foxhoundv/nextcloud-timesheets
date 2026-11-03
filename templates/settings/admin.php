@@ -22,7 +22,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
     <h2><?php p($l->t('Timesheet Administration')); ?></h2>
     <p class="timesheets-intro"><?php p($l->t('Configure tracking preferences and time-recording rules for your organization.')); ?></p>
     <p><?php p($l->t('Saved settings, shift/job history, and active intervals are retained when the app is updated. After an update, reload the dashboard to see continuing timers; elapsed time includes the update period.')); ?></p>
-    <p class="timesheets-notice"><?php p($l->t('Shift tracking and job tracking can each be used independently. Enable both to configure their interaction below. Users take unpaid breaks by clocking out and starting a new shift when they return; time between shifts is not counted. There is no separate break switch or automatic deduction. End active jobs before a break. Rounding and shift confirmations are still in development.')); ?></p>
+    <p class="timesheets-notice"><?php p($l->t('Shift tracking and job tracking can each be used independently. Enable both to configure their interaction below. Users take unpaid breaks by clocking out and starting a new shift when they return; time between shifts is not counted. There is no separate break switch or automatic deduction. End active jobs before a break. Optional rounding affects reported time only. Shift confirmations are still in development.')); ?></p>
 
     <form id="timesheets-admin-form" method="post" action="<?php p($_['saveUrl']); ?>">
         <fieldset>
@@ -70,11 +70,22 @@ foreach ($_['accessDirectory'] as $type => $entries) {
 
         <fieldset>
             <legend><?php p($l->t('Time rounding')); ?></legend>
-            <p class="timesheets-fieldset-help"><?php p($l->t('Choose the interval for each type of time. Smaller intervals keep more detail; larger intervals group time into larger blocks.')); ?></p>
+            <p class="timesheets-fieldset-help"><?php p($l->t('Rounding is optional and independent for shifts and jobs; both start off. Each duration rounds to the nearest interval, with exact halfway values rounded up. For example, 7m 29s rounds to 0m and 7m 30s to 15m with a 15-minute interval.')); ?></p>
+            <p class="timesheets-fieldset-help"><?php p($l->t('Settings at clock-out are saved with that interval, including intervals already active when settings change. Completed history never changes. Actual timestamps, elapsed time, and job/shop overlap calculations remain unchanged; reported durations and totals are shown separately.')); ?></p>
+        <div class="timesheets-admin-row">
+            <div class="timesheets-setting-copy">
+                <label for="shift_rounding_enabled"><?php p($l->t('Enable shift rounding')); ?></label>
+                <p id="shift_rounding_enabled_help"><?php p($l->t('Round each completed work period separately, not the daily total or clock timestamps. Off saves actual duration as reported time. Break gaps are never included.')); ?></p>
+            </div>
+            <select name="shift_rounding_enabled" id="shift_rounding_enabled" aria-describedby="shift_rounding_enabled_help">
+                <option value="0" <?php echo !$_['shiftRoundingEnabled'] ? 'selected' : ''; ?>><?php p($l->t('Off (default)')); ?></option>
+                <option value="1" <?php echo $_['shiftRoundingEnabled'] ? 'selected' : ''; ?>><?php p($l->t('On')); ?></option>
+            </select>
+        </div>
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">
                 <label for="shift_rounding"><?php p($l->t('Shift rounding interval')); ?></label>
-                <p id="shift_rounding_help"><?php p($l->t('The interval intended for shift-time rounding. For example, 15 minutes represents quarter-hour blocks. This preference is separate from job rounding.')); ?></p>
+                <p id="shift_rounding_help"><?php p($l->t('Choose 5, 10, 15, or 30 minutes for enabled shift rounding. This selection is retained while rounding is off and does not change completed shifts.')); ?></p>
             </div>
             <select name="shift_rounding" id="shift_rounding" aria-describedby="shift_rounding_help">
                 <?php foreach (['5', '10', '15', '30'] as $interval): ?>
@@ -85,8 +96,18 @@ foreach ($_['accessDirectory'] as $type => $entries) {
 
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">
+                <label for="job_rounding_enabled"><?php p($l->t('Enable job rounding')); ?></label>
+                <p id="job_rounding_enabled_help"><?php p($l->t('Round each completed job interval independently, including job-only work and time outside shifts. Does not change actual job time or the job/shop breakdown. Off reports actual duration.')); ?></p>
+            </div>
+            <select name="job_rounding_enabled" id="job_rounding_enabled" aria-describedby="job_rounding_enabled_help">
+                <option value="0" <?php echo !$_['jobRoundingEnabled'] ? 'selected' : ''; ?>><?php p($l->t('Off (default)')); ?></option>
+                <option value="1" <?php echo $_['jobRoundingEnabled'] ? 'selected' : ''; ?>><?php p($l->t('On')); ?></option>
+            </select>
+        </div>
+        <div class="timesheets-admin-row">
+            <div class="timesheets-setting-copy">
                 <label for="job_rounding"><?php p($l->t('Job rounding interval')); ?></label>
-                <p id="job_rounding_help"><?php p($l->t('The interval intended for rounding individual job entries. Choose 5, 10, 15, or 30 minutes independently of the shift interval.')); ?></p>
+                <p id="job_rounding_help"><?php p($l->t('Choose 5, 10, 15, or 30 minutes for enabled job rounding, independently of shifts. This selection is retained while rounding is off and does not change completed jobs.')); ?></p>
             </div>
             <select name="job_rounding" id="job_rounding" aria-describedby="job_rounding_help">
                 <?php foreach (['5', '10', '15', '30'] as $interval): ?>

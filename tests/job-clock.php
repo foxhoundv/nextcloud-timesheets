@@ -70,8 +70,9 @@ $jobs = new JobMapper($db);
 $shifts = new ShiftMapper($db);
 $access = Server::get(AccessService::class);
 $transaction = new ClockTransaction($db);
-$shiftClock = new ShiftClockService($shifts, $config, $time, $access, $transaction, $jobs);
-$jobClock = new JobClockService($jobs, $shifts, $shiftClock, $access, $config, $time, $transaction);
+$rounding = Server::get(\OCA\Timesheets\Service\RoundingService::class);
+$shiftClock = new ShiftClockService($shifts, $config, $time, $access, $transaction, $jobs, $rounding);
+$jobClock = new JobClockService($jobs, $shifts, $shiftClock, $access, $config, $time, $transaction, $rounding);
 function rejects(callable $action, int $code, string $message): void {
     try {
         $action();
@@ -168,7 +169,7 @@ try {
     $jobClock->clockOut($id, $dst->getId());
     $found = array_values(array_filter($jobs->findByUser($id), static fn ($row): bool => $row->getId() === $dst->getId()))[0];
     check($found->getDurationSeconds() === 7200, 'Job elapsed time spans daylight-saving changes correctly');
-    check(!$jobs->closeJob($dst, '2026-11-01 12:30:00', 14400), 'Conditional close cannot overwrite a completed job');
+    check(!$jobs->closeJob($dst, '2026-11-01 12:30:00', 14400, 0, 14400), 'Conditional close cannot overwrite a completed job');
 
     $config->setAppValue('timesheets', 'job_require_shift', '1');
     $config->setAppValue('timesheets', 'shift_end_job_policy', 'block');

@@ -33,12 +33,14 @@ class ShiftMapper extends QBMapper {
         return $shifts[0] ?? null;
     }
 
-    public function closeShift(Shift $shift, string $clockOut, int $seconds): bool {
+    public function closeShift(Shift $shift, string $clockOut, int $seconds, int $roundingInterval, int $roundedSeconds): bool {
         $qb = $this->db->getQueryBuilder();
         $qb->update($this->getTableName())
             ->set('clock_out', $qb->createNamedParameter($clockOut))
             ->set('duration_seconds', $qb->createNamedParameter($seconds, IQueryBuilder::PARAM_INT))
             ->set('duration_minutes', $qb->createNamedParameter(intdiv($seconds, 60), IQueryBuilder::PARAM_INT))
+            ->set('rounding_interval', $qb->createNamedParameter($roundingInterval, IQueryBuilder::PARAM_INT))
+            ->set('rounded_seconds', $qb->createNamedParameter($roundedSeconds, IQueryBuilder::PARAM_INT))
             ->set('status', $qb->createNamedParameter('closed'))
             ->set('open_user_id', $qb->createNamedParameter(null, IQueryBuilder::PARAM_NULL))
             ->where($qb->expr()->eq('id', $qb->createNamedParameter($shift->getId(), IQueryBuilder::PARAM_INT)))
