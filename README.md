@@ -11,7 +11,7 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 
 ## App versioning
 
-Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `0.1.15` already follows this format.
+Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `0.1.16` follows this format.
 
 Before changing the app version for an update, ask the project owner whether it is a **Major**, **Minor**, or **Sub-minor** change; do not choose a level or bump the version without that answer. Increment the selected component and reset any lower-order components to 1: a sub-minor update changes only the last component, a minor update resets Sub-minor to 1, and a major update resets Minor and Sub-minor to 1. For example, `0.1.15` to `0.1.16` is Sub-minor, `0.1.99` to `0.2.1` is Minor, and `0.9.99` to `1.1.1` is Major.
 
@@ -139,7 +139,9 @@ Breakdowns are read-only projections of existing records. No schema migration, h
 
 ### Optional shift and job rounding
 
-Version 0.1.15 adds independent **Enable shift rounding** and **Enable job rounding** switches in Timesheet Administration. Both default to **Off**, including on upgrade; previously saved 5/10/15/30-minute interval selections are retained but do not activate rounding. Save tracking preferences after choosing each switch and interval.
+Version 0.1.16 adds independent, opt-in shift and job duration rounding.
+
+The independent **Enable shift rounding** and **Enable job rounding** switches in Timesheet Administration both default to **Off**, including on upgrade; previously saved 5/10/15/30-minute interval selections are retained but do not activate rounding. Save tracking preferences after choosing each switch and interval.
 
 Rounding applies to each completed interval's **duration**, not its clock timestamps or a daily sum. The nearest interval wins; exact halfway rounds up. With 15-minute rounding, 7m 29s reports 0m, 7m 30s reports 15m, and 22m 30s reports 30m. A short job/shift can report zero; actual time is always retained. Separate work periods around breaks round independently.
 

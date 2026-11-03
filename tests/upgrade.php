@@ -85,6 +85,8 @@ $preferences = [
     'job_tracking' => '1',
     'shift_rounding' => '5',
     'job_rounding' => '30',
+    'shift_rounding_enabled' => '1',
+    'job_rounding_enabled' => '0',
     'net_shift_threshold' => '487',
 ];
 
@@ -239,6 +241,9 @@ check($settings->getForm()->getParams()['settings'] === [
     'job_rounding' => '30',
     'net_shift_threshold' => 487,
 ], 'Administration page still receives every non-default setting');
+check($settings->getForm()->getParams()['shiftRoundingEnabled']
+    && !$settings->getForm()->getParams()['jobRoundingEnabled'],
+    'Independent rounding switches retain their explicit non-default states through upgrade');
 check(array_map('snapshot', $mapper->findByUser($state['userId'])) === $state['shifts'],
     'Historical and active shift fields are unchanged by upgrade');
 foreach ([
