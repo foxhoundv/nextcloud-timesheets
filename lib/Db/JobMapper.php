@@ -21,6 +21,16 @@ class JobMapper extends QBMapper {
         return $this->findEntities($qb);
     }
 
+    public function findCompletedByReference(string $reference): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')->from($this->getTableName())
+            ->where($qb->expr()->eq('job_reference', $qb->createNamedParameter($reference)))
+            ->andWhere($qb->expr()->isNotNull('clock_out'))
+            ->orderBy('clock_in', 'ASC')
+            ->addOrderBy('id', 'ASC');
+        return $this->findEntities($qb);
+    }
+
     public function findOpenForUser(string $userId): ?Job {
         $qb = $this->db->getQueryBuilder();
         $qb->select('*')->from($this->getTableName())

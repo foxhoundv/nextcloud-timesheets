@@ -88,6 +88,9 @@ $preferences = [
     'shift_rounding_enabled' => '1',
     'job_rounding_enabled' => '0',
     'net_shift_threshold' => '487',
+    'storage_owner' => '',
+    'payroll_storage_root' => 'payroll-share/timesheets',
+    'sales_order_storage_root' => 'sales-orders',
 ];
 
 if ($phase === 'prepare') {
@@ -106,6 +109,7 @@ if ($phase === 'prepare') {
             'shift_end_job_policy' => $config->getAppValue('timesheets', 'shift_end_job_policy', ''),
         ],
     ];
+    $preferences['storage_owner'] = $state['userId'];
     $oldMask = umask(0077);
     try {
         $handle = fopen($stateFile, 'x');
@@ -178,6 +182,7 @@ if (!is_array($state) || !is_string($state['userId'] ?? null)
     || array_keys($state['previous']) !== array_keys($preferences)) {
     throw new RuntimeException('Invalid upgrade test state; refusing to change data.');
 }
+$preferences['storage_owner'] = $state['userId'];
 
 if ($phase === 'cleanup') {
     $jobMapper = Server::get(\OCA\Timesheets\Db\JobMapper::class);
@@ -236,7 +241,8 @@ if (isset($state['accessPolicy'])) {
 foreach ($preferences as $key => $value) {
     check($config->getAppValue('timesheets', $key) === $value, 'Non-default setting survives upgrade: ' . $key);
 }
-$settings = new AdminSettings($config, Server::get(IURLGenerator::class), $access);
+$settings = new AdminSettings($config, Server::get(IURLGenerator::class), $access,
+    Server::get(\OCA\Timesheets\Service\StorageService::class));
 check($settings->getForm()->getParams()['settings'] === [
     'shift_tracking' => true,
     'job_tracking' => true,
@@ -247,6 +253,11 @@ check($settings->getForm()->getParams()['settings'] === [
 check($settings->getForm()->getParams()['shiftRoundingEnabled']
     && !$settings->getForm()->getParams()['jobRoundingEnabled'],
     'Independent rounding switches retain their explicit non-default states through upgrade');
+check($settings->getForm()->getParams()['storage'] === [
+    'owner' => $state['userId'],
+    'payrollRoot' => 'payroll-share/timesheets',
+    'salesOrderRoot' => 'sales-orders',
+], 'Configured storage roots survive upgrade');
 check(array_map('snapshot', $mapper->findByUser($state['userId'])) === $state['shifts'],
     'Historical and active shift fields are unchanged by upgrade');
 foreach ([

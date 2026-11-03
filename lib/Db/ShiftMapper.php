@@ -25,6 +25,18 @@ class ShiftMapper extends QBMapper {
         return $this->findEntities($qb);
     }
 
+    public function findCompletedBetween(string $startDate, string $endDate): array {
+        $qb = $this->db->getQueryBuilder();
+        $qb->select('*')->from($this->getTableName())
+            ->where($qb->expr()->gte('shift_date', $qb->createNamedParameter($startDate)))
+            ->andWhere($qb->expr()->lte('shift_date', $qb->createNamedParameter($endDate)))
+            ->andWhere($qb->expr()->isNotNull('clock_out'))
+            ->orderBy('user_id', 'ASC')
+            ->addOrderBy('shift_date', 'ASC')
+            ->addOrderBy('clock_in', 'ASC');
+        return $this->findEntities($qb);
+    }
+
     public function findOpenForUser(string $userId): ?Shift {
         $qb = $this->db->getQueryBuilder();
         $qb->select('*')->from($this->getTableName())

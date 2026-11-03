@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace OCA\Timesheets\Settings;
 
 use OCA\Timesheets\Service\AccessService;
+use OCA\Timesheets\Service\StorageService;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
 use OCP\IURLGenerator;
@@ -15,6 +16,7 @@ class AdminSettings implements ISettings {
         private IConfig $config,
         private IURLGenerator $urlGenerator,
         private AccessService $access,
+        private StorageService $storage,
     ) {
     }
 
@@ -45,6 +47,11 @@ class AdminSettings implements ISettings {
                 'user' => $this->access->directory('user'),
             ],
             'canManageAdminAssignments' => $canManageAdminAssignments,
+            'storage' => $this->storage->settings(),
+            'storageSaveUrl' => $this->urlGenerator->linkToRoute('timesheets.storage.save'),
+            'payrollReportUrl' => $this->urlGenerator->linkToRoute('timesheets.storage.payroll'),
+            'salesOrderReportUrl' => $this->urlGenerator->linkToRoute('timesheets.storage.salesorder'),
+            'reportDate' => (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d'),
         ];
     }
 

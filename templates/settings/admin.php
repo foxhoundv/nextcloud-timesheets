@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 script('timesheets', 'admin');
 script('timesheets', 'access');
+script('timesheets', 'storage');
 style('timesheets', 'main');
 
 $settings = $_['settings'];
@@ -194,5 +195,75 @@ foreach ($_['accessDirectory'] as $type => $entries) {
             <button type="submit" class="primary"><?php p($l->t('Save access settings')); ?></button>
             <p id="timesheets-access-status" role="status" aria-live="polite"></p>
         </div>
+    </form>
+
+    <h2><?php p($l->t('Storage and reports')); ?></h2>
+    <p class="timesheets-intro"><?php p($l->t('Choose existing writable folders from the configured account\'s Nextcloud files. The paths are relative to that account, whose folders must be shared with anyone who needs the generated workbooks. Timesheets data remains in the Nextcloud database; workbooks are regenerated on demand.')); ?></p>
+    <p><?php p($l->t('Storage account: %s', [$_['storage']['owner'] !== '' ? $_['storage']['owner'] : $l->t('Not configured')])); ?></p>
+    <form id="timesheets-storage-form" method="post" action="<?php p($_['storageSaveUrl']); ?>">
+        <fieldset>
+            <legend><?php p($l->t('Shared storage roots')); ?></legend>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="payroll_storage_root"><?php p($l->t('Payroll timesheets folder')); ?></label>
+                    <p id="payroll_storage_root_help"><?php p($l->t('Path to an existing writable shared folder for per-user payroll workbooks, relative to the Nextcloud account shown above.')); ?></p>
+                </div>
+                <input type="text" id="payroll_storage_root" name="payrollRoot" required maxlength="1024" aria-describedby="payroll_storage_root_help" value="<?php p($_['storage']['payrollRoot']); ?>">
+            </div>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="sales_order_storage_root"><?php p($l->t('Sales Orders folder')); ?></label>
+                    <p id="sales_order_storage_root_help"><?php p($l->t('Path to an existing writable shared folder containing one folder per Sales Order. A folder name may continue after the entered reference; ambiguous starting-name matches are rejected.')); ?></p>
+                </div>
+                <input type="text" id="sales_order_storage_root" name="salesOrderRoot" required maxlength="1024" aria-describedby="sales_order_storage_root_help" value="<?php p($_['storage']['salesOrderRoot']); ?>">
+            </div>
+            <div class="timesheets-admin-actions">
+                <button type="submit" class="primary"><?php p($l->t('Save storage roots')); ?></button>
+                <p id="timesheets-storage-status" role="status" aria-live="polite"></p>
+            </div>
+        </fieldset>
+    </form>
+
+    <form id="timesheets-payroll-report-form" method="post" action="<?php p($_['payrollReportUrl']); ?>">
+        <fieldset>
+            <legend><?php p($l->t('Generate payroll timesheets')); ?></legend>
+            <p class="timesheets-fieldset-help"><?php p($l->t('Generates one XLSX workbook for each employee with completed shifts in the selected period. Weekly periods run Monday through Sunday; monthly periods use calendar months. Bi-weekly reports are not enabled until the pay-period start date is configured.')); ?></p>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="payroll_period"><?php p($l->t('Payroll period')); ?></label>
+                </div>
+                <select id="payroll_period" name="period">
+                    <option value="weekly"><?php p($l->t('Weekly (Monday-Sunday)')); ?></option>
+                    <option value="monthly"><?php p($l->t('Monthly (calendar month)')); ?></option>
+                </select>
+            </div>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="payroll_date"><?php p($l->t('Choose any date in the period')); ?></label>
+                </div>
+                <input type="date" id="payroll_date" name="date" required value="<?php p($_['reportDate']); ?>">
+            </div>
+            <div class="timesheets-admin-actions">
+                <button type="submit" class="primary"><?php p($l->t('Generate employee workbooks')); ?></button>
+                <p id="timesheets-payroll-status" role="status" aria-live="polite"></p>
+            </div>
+        </fieldset>
+    </form>
+
+    <form id="timesheets-sales-order-report-form" method="post" action="<?php p($_['salesOrderReportUrl']); ?>">
+        <fieldset>
+            <legend><?php p($l->t('Generate a Sales Order time log')); ?></legend>
+            <p class="timesheets-fieldset-help"><?php p($l->t('Enter a job reference that matches the start of exactly one folder in the Sales Orders root. The completed job intervals for that exact reference are written to or replace Time logs/Time logs.xlsx.')); ?></p>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="sales_order_reference"><?php p($l->t('Sales Order / job reference')); ?></label>
+                </div>
+                <input type="text" id="sales_order_reference" name="reference" required maxlength="255">
+            </div>
+            <div class="timesheets-admin-actions">
+                <button type="submit" class="primary"><?php p($l->t('Generate Sales Order workbook')); ?></button>
+                <p id="timesheets-sales-order-status" role="status" aria-live="polite"></p>
+            </div>
+        </fieldset>
     </form>
 </div>

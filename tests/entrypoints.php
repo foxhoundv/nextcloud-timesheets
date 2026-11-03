@@ -261,6 +261,13 @@ try {
     check($denied['status'] === 403, 'Regular account cannot open administration settings');
     $denied = request('/index.php/apps/timesheets/settings', [], $token);
     check($denied['status'] === 403, 'Regular account cannot save administration settings');
+    $storageDenied = request('/index.php/apps/timesheets/settings/storage', [
+        'payrollRoot' => 'payroll',
+        'salesOrderRoot' => 'sales-orders',
+    ], $token);
+    check($storageDenied['status'] === 403,
+        'Regular accounts cannot configure Timesheets storage (HTTP ' . $storageDenied['status'] . ': '
+            . substr($storageDenied['body'], 0, 300) . ')');
 
     $settingsSaved = true;
     setTrackingOverHttp(true, $token);
@@ -317,6 +324,15 @@ try {
     $admin = request('/index.php/settings/admin/timesheets');
     check($admin['status'] === 200 && str_contains($admin['body'], 'timesheets-admin-form'),
         'Administrator can open Timesheets administration settings (HTTP ' . $admin['status'] . ')');
+    check(str_contains($admin['body'], 'timesheets-storage-form')
+        && str_contains($admin['body'], 'timesheets-payroll-report-form')
+        && str_contains($admin['body'], 'timesheets-sales-order-report-form'),
+        'Administration includes shared storage configuration and on-demand workbook forms');
+    check(request('/index.php/apps/timesheets/settings/storage', [
+        'payrollRoot' => '../invalid',
+        'salesOrderRoot' => '../invalid',
+    ], $token)['status'] === 400,
+        'Storage root save rejects unsafe relative paths without changing settings');
     check(str_contains($admin['body'], 'timesheets/js/admin.js'), 'Settings page loads the external save script');
     check(str_contains($admin['body'], 'role="tablist"') && str_contains($admin['body'], 'timesheets-tab-group')
         && str_contains($admin['body'], 'timesheets-tab-user') && str_contains($admin['body'], 'Groups/Users With Access'),

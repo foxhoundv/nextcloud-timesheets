@@ -259,7 +259,9 @@
 }
 
 #timesheets-admin .timesheets-admin-row select,
-#timesheets-admin .timesheets-admin-row input[type="number"] {
+#timesheets-admin .timesheets-admin-row input[type="number"],
+#timesheets-admin .timesheets-admin-row input[type="text"],
+#timesheets-admin .timesheets-admin-row input[type="date"] {
     box-sizing: border-box;
     width: 100%;
     min-width: 0;
@@ -390,7 +392,9 @@
     }
 
     #timesheets-admin .timesheets-admin-row select,
-    #timesheets-admin .timesheets-admin-row input[type="number"] {
+    #timesheets-admin .timesheets-admin-row input[type="number"],
+    #timesheets-admin .timesheets-admin-row input[type="text"],
+    #timesheets-admin .timesheets-admin-row input[type="date"] {
         max-width: 280px;
     }
 }

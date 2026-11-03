@@ -1,6 +1,6 @@
 # Timesheets for Nextcloud
 
-Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-time totals, printable employee views, and yearly Excel workbooks.
+Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-time totals, printable employee views, and on-demand XLSX reports.
 
 ## Compatibility
 
@@ -11,7 +11,7 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 
 ## App versioning
 
-Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `0.3.2` follows this format.
+Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `1.1.1` follows this format.
 
 Before changing the app version for an update, ask the project owner whether it is a **Major**, **Minor**, or **Sub-minor** change; do not choose a level or bump the version without that answer. Increment the selected component and reset any lower-order components to 1: a sub-minor update changes only the last component, a minor update resets Sub-minor to 1, and a major update resets Minor and Sub-minor to 1. For example, `0.1.15` to `0.1.16` is Sub-minor, `0.1.99` to `0.2.1` is Minor, and `0.9.99` to `1.1.1` is Major.
 
@@ -27,9 +27,8 @@ Before changing the app version for an update, ask the project owner whether it 
 - Shift intervals crossing midnight are attributed to their start date. Their duration remains the full elapsed interval.
 - Job intervals are separate rows, one for each clock-in/out pair. Time in a completed shift outside job intervals counts as shop time.
 - Completed times display using the employee's current time-zone setting. An open interval retains its clock-in time zone through clock-out.
-- Employee workbooks have monthly sheets 01 through 12, plus a yearly cumulative sheet. Yearly totals use rounded durations.
-- Employees use a print-ready app view; only administrators can access or edit workbook files.
-- Job workbooks are saved in each Sales Order folder under Time logs.
+- Employees use a print-ready app view. Generated workbook access is controlled by Nextcloud's normal file-sharing permissions; configure both storage roots so only the intended administrators can access or edit the reports. App access alone does not grant access to those folders.
+- Payroll workbooks are generated on demand per employee for a selected weekly or monthly period. Sales Order workbooks are generated on demand in the matching Sales Order folder under `Time logs`.
 
 ## Development workflow
 
@@ -158,6 +157,16 @@ An additive migration adds nullable rounding fields to shifts and jobs without c
 
 On the testing server, run `php apps/timesheets/tests/rounding.php /path/to/nextcloud` for every interval's second-level boundaries, half-up ties, independent switches, clock-out snapshots, immutable history, actual overlap preservation, legacy records, invalid-input rollback, and stale close protection. The test restores original settings and removes its temporary account/intervals. The HTTP entry-point suite verifies administration persistence, validation, and omission compatibility. Use only the testing instance when other testing users are idle; adjust for `custom_apps`.
 
+### Shared storage and workbook reports
+
+Nextcloud administrators and delegated Timesheets administrators can configure two existing writable folders in the configured storage account's Nextcloud files: a payroll-timesheets root and a Sales Orders root. Paths are relative to the account that saves the roots. Share these folders with the appropriate administrators; generated files follow Nextcloud's normal file-sharing permissions. Timesheets records remain in the database, and workbooks can be regenerated on demand.
+
+Payroll reports generate one XLSX per employee with completed shifts in the selected period. Weekly reports use Monday through Sunday; monthly reports use calendar months. Choose any date in the requested period. Each workbook includes local clock-in/out times, actual and reported durations, the captured rounding interval, and totals. Files are placed in a URL-encoded account-ID subfolder of the payroll root and replaced when regenerated for the same period. Employees without completed shifts in the period do not get an empty workbook. Bi-weekly reports are not enabled until the pay-period anchor date is configured.
+
+For Sales Order reports, enter a job reference that matches the beginning of exactly one folder in the Sales Orders root (matching is case-insensitive). Ambiguous prefixes are rejected. The app creates or updates `Time logs/Time logs.xlsx` inside that folder with completed intervals for the exact entered reference, employee names and account IDs, local timestamps, actual and reported durations, rounding settings, and totals. Open jobs are excluded. This report is generated on demand; clocking in or out never depends on file-storage availability.
+
+On the testing server, run `php apps/timesheets/tests/storage.php /path/to/nextcloud` to verify root validation, weekly/monthly employee exports, exact Sales Order selection, ambiguity handling, and XLSX contents. The test creates and removes temporary accounts, files, and settings; run it only against the testing instance.
+
 ### Long-shift threshold reminder
 
 The **Net shift threshold (minutes)** setting controls a post-clock-out reminder. A value of `0` disables it; a positive value shows a dismissible dashboard reminder when a completed shift's **actual elapsed seconds** meet or exceed the threshold in minutes. Clock-out always completes first; the reminder neither blocks the action nor changes saved time. Separate-shift break gaps are excluded, and rounding does not affect the threshold. Invalid thresholds are rejected before administration preferences are saved. The reminder appears after the dashboard reloads and can be dismissed.
@@ -212,7 +221,7 @@ The existing `.gitignore` rules exclude `.env` from Git. Keep real credentials o
 
 ## Development status
 
-This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time and optional saved rounding, configurable shift/job interaction, completed-shift job/shop breakdowns, post-clock-out long-shift reminders, unpaid breaks as gaps between separate shifts, user/group tracking grants, and delegated Timesheets administration. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. Storage integration, printable views, and workbook generation are planned next.
+This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time and optional saved rounding, configurable shift/job interaction, completed-shift job/shop breakdowns, post-clock-out long-shift reminders, unpaid breaks as gaps between separate shifts, user/group tracking grants, delegated Timesheets administration, shared storage roots, and on-demand XLSX reports. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. The storage PHP suite passes on that server; HTTP verification of the new endpoints remains pending a route refresh through an app update. Printable views remain planned.
 
 ## Longer-term direction
 
