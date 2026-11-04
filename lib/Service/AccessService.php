@@ -13,6 +13,7 @@ class AccessService {
         private IConfig $config,
         private IUserManager $users,
         private IGroupManager $groups,
+        private ClockTransaction $transaction,
     ) {
     }
 
@@ -43,20 +44,35 @@ class AccessService {
                 throw new \DomainException('An assigned user or group no longer exists. Remove or replace that assignment.', 400);
             }
         }
-        if ($actorId !== null) {
-            if (!$this->isTimesheetsAdmin($actorId)) {
+        $this->transaction->exclusive(function () use ($policy, $actorId): void {
+            if ($actorId !== null && !$this->isTimesheetsAdmin($actorId)) {
                 throw new \DomainException('You do not have permission to manage Timesheets settings.', 403);
             }
-            if (!$this->isNextcloudAdmin($actorId)
+            if ($actorId !== null && !$this->isNextcloudAdmin($actorId)
                 && $this->adminAssignments($policy) !== $this->adminAssignments($this->policy())) {
                 throw new \DomainException('Only Nextcloud administrators can change delegated administrator assignments.', 403);
             }
-        }
-        $this->config->setAppValue('timesheets', 'access_policy', json_encode($policy, JSON_THROW_ON_ERROR));
+            $adminChanges = $this->adminAssignments($policy) !== $this->adminAssignments($this->policy());
+            $this->config->setAppValue('timesheets', 'access_policy', json_encode($policy, JSON_THROW_ON_ERROR));
+            if ($adminChanges) {
+                $this->transaction->invalidateReset();
+            }
+        });
     }
 
     public function isNextcloudAdmin(string $userId): bool {
         return $this->groups->isAdmin($userId);
+    }
+
+    public function administrators(): array {
+        $ids = [];
+        foreach ($this->directory('user') as $entry) {
+            if ($this->isTimesheetsAdmin($entry['id'])) {
+                $ids[] = $entry['id'];
+            }
+        }
+        sort($ids, SORT_STRING);
+        return $ids;
     }
 
     public function isTimesheetsAdmin(string $userId): bool {

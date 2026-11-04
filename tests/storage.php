@@ -87,6 +87,7 @@ function workbookSheet(string $content): string {
             '_rels/.rels',
             'xl/workbook.xml',
             'xl/_rels/workbook.xml.rels',
+            'xl/styles.xml',
             'xl/worksheets/sheet1.xml',
         ];
         foreach ($parts as $part) {
@@ -102,6 +103,14 @@ function workbookSheet(string $content): string {
         $sheet = $archive->getFromName('xl/worksheets/sheet1.xml');
         if ($sheet === false) {
             throw new RuntimeException('Generated workbook is missing its worksheet.');
+        }
+        $document = new DOMDocument();
+        $document->loadXML($sheet, LIBXML_NONET);
+        $xpath = new DOMXPath($document);
+        $xpath->registerNamespace('s', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+        if ($xpath->query('//s:cols/s:col[@customWidth="1"]')->length === 0
+            || $xpath->query('//s:c[not(@s="1")]')->length !== 0) {
+            throw new RuntimeException('Generated payroll or Job workbook is missing content widths or wrapping styles.');
         }
         return $sheet;
     } finally {

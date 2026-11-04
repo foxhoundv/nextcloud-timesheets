@@ -6,6 +6,32 @@
     line-height: 1.6;
 }
 
+#timesheets-admin #timesheets-record-reset {
+    margin: 24px 0;
+    padding: 16px;
+    border: 2px solid var(--color-error);
+    border-radius: 8px;
+}
+
+#timesheets-reset-dialog {
+    position: fixed;
+    inset: 0;
+    margin: auto;
+    box-sizing: border-box;
+    width: min(600px, calc(100vw - 48px));
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    padding: 24px;
+    color: var(--color-main-text);
+    background: var(--color-main-background);
+    border: 2px solid var(--color-error);
+    border-radius: 8px;
+}
+
+#timesheets-reset-dialog::backdrop {
+    background: rgba(0, 0, 0, 0.5);
+}
+
 #timesheets {
     width: 100%;
     max-width: 1160px;

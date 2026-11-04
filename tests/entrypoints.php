@@ -78,6 +78,8 @@ $previousAccess = $config->getAppValue('timesheets', 'access_policy', '');
 $accessSaved = false;
 $accessGroup = null;
 $storageFixture = null;
+$resetOtherUser = null;
+$resetRequestId = null;
 require_once __DIR__ . '/JobStorageFixture.php';
 
 function request(string $path, ?array $payload = null, ?string $token = null): array {
@@ -271,6 +273,11 @@ try {
     check($storageDenied['status'] === 403,
         'Regular accounts cannot configure Timesheets storage (HTTP ' . $storageDenied['status'] . ': '
             . substr($storageDenied['body'], 0, 300) . ')');
+    foreach (['status', 'approve', 'cancel'] as $action) {
+        check(request('/index.php/apps/timesheets/settings/records/' . $action, [
+            'confirmation' => 'DELETE', 'snapshot' => 'invalid', 'requestId' => 'invalid',
+        ], $token)['status'] === 403, 'Regular users cannot call record deletion ' . $action);
+    }
 
     $settingsSaved = true;
     setTrackingOverHttp(true, $token);
@@ -327,6 +334,45 @@ try {
     $admin = request('/index.php/settings/admin/timesheets');
     check($admin['status'] === 200 && str_contains($admin['body'], 'timesheets-admin-form'),
         'Administrator can open Timesheets administration settings (HTTP ' . $admin['status'] . ')');
+    check(str_contains($admin['body'], 'timesheets-reset-dialog')
+        && str_contains($admin['body'], 'Type DELETE to give your approval')
+        && str_contains($admin['body'], 'Yes - Delete')
+        && str_contains($admin['body'], 'timesheets/js/record-reset.js'),
+        'Administration includes an external-script confirmation modal for database-only deletion');
+    $resetBase = '/index.php/apps/timesheets/settings/records/';
+    foreach (['status', 'approve', 'cancel'] as $action) {
+        check(request($resetBase . $action, [
+            'confirmation' => 'DELETE', 'snapshot' => 'invalid', 'requestId' => 'invalid',
+        ])['status'] === 412, 'Record deletion ' . $action . ' requires CSRF protection');
+    }
+    $resetOtherUser = $userManager->createUser($userId . '-reset-admin', bin2hex(random_bytes(24)));
+    check($resetOtherUser !== false, 'Second reset test administrator created to prevent a real unanimous deletion');
+    $adminGroup->addUser($resetOtherUser);
+    $resetResponse = request($resetBase . 'status', [], $token);
+    $resetState = json_decode($resetResponse['body'], true, 512, JSON_THROW_ON_ERROR)['result'] ?? null;
+    check($resetResponse['status'] === 200 && $resetState !== null && $resetState['requestId'] === ''
+        && in_array($userId, $resetState['administrators'], true)
+        && in_array($resetOtherUser->getUID(), $resetState['administrators'], true),
+        'Deletion status includes every enabled Nextcloud administrator and has no pre-existing pending request');
+    check(request($resetBase . 'approve', [
+        'confirmation' => 'delete', 'snapshot' => $resetState['snapshot'], 'requestId' => '',
+    ], $token)['status'] === 400, 'HTTP deletion approval requires the exact uppercase DELETE text');
+    $resetResponse = request($resetBase . 'approve', [
+        'confirmation' => 'DELETE', 'snapshot' => $resetState['snapshot'], 'requestId' => '',
+    ], $token);
+    $approved = json_decode($resetResponse['body'], true, 512, JSON_THROW_ON_ERROR)['result'] ?? null;
+    $resetRequestId = $approved['requestId'] ?? null;
+    check($resetResponse['status'] === 200 && $approved !== null && !$approved['deleted']
+        && $approved['approved'] === [$userId] && $approved['counts'] === $resetState['counts'],
+        'One HTTP approval is persisted without deleting any server time logs');
+    $resetReload = request($resetBase . 'status', [], $token);
+    check(json_decode($resetReload['body'], true, 512, JSON_THROW_ON_ERROR)['result']['approved'] === [$userId],
+        'Approval remains visible across independent HTTP requests');
+    check(request($resetBase . 'cancel', ['requestId' => $resetRequestId], $token)['status'] === 200,
+        'Administrator can cancel a pending unanimous deletion over HTTP');
+    $resetRequestId = null;
+    check($resetOtherUser->delete(), 'Second reset test administrator removed without approving deletion');
+    $resetOtherUser = null;
     check(str_contains($admin['body'], 'timesheets-storage-form')
         && str_contains($admin['body'], 'timesheets-payroll-report-form')
         && !str_contains($admin['body'], 'timesheets-job-report-form')
@@ -613,6 +659,15 @@ try {
     check(request('/index.php/apps/timesheets/admin')['status'] === 200,
         'Nextcloud administrators retain access to the app settings page');
 } finally {
+    if ($resetRequestId !== null && $resetOtherUser !== null && $resetOtherUser !== false) {
+        $reset = Server::get(\OCA\Timesheets\Service\RecordResetService::class);
+        if ($reset->status($resetOtherUser->getUID())['requestId'] === $resetRequestId) {
+            $reset->cancel($resetOtherUser->getUID(), $resetRequestId);
+        }
+    }
+    if ($resetOtherUser !== null && $resetOtherUser !== false && !$resetOtherUser->delete()) {
+        throw new RuntimeException('Failed to remove the temporary reset administrator');
+    }
     if ($storageFixture !== null) {
         $storageFixture->cleanup();
     }

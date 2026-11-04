@@ -6,6 +6,7 @@ script('timesheets', 'admin');
 script('timesheets', 'access');
 script('timesheets', 'storage');
 script('timesheets', 'locations');
+script('timesheets', 'record-reset');
 style('timesheets', 'main');
 
 $settings = $_['settings'];
@@ -26,6 +27,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
     <p><?php p($l->t('Saved settings, shift/job history, and active intervals are retained when the app is updated. After an update, reload the dashboard to see continuing timers; elapsed time includes the update period.')); ?></p>
     <p class="timesheets-notice"><?php p($l->t('Shift tracking and job tracking can each be used independently. Enable both to configure their interaction below. Users take unpaid breaks by clocking out and starting a new shift when they return; time between shifts is not counted. There is no separate break switch or automatic deduction. End active jobs before a break. Optional rounding affects reported time only. Long-shift reminders appear after clock-out when enabled.')); ?></p>
     <?php include __DIR__ . '/locations.php'; ?>
+    <?php include __DIR__ . '/record-reset.php'; ?>
 
     <form id="timesheets-admin-form" method="post" action="<?php p($_['saveUrl']); ?>">
         <fieldset>

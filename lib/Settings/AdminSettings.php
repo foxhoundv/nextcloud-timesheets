@@ -38,6 +38,9 @@ class AdminSettings implements ISettings {
         return [
             'settings' => $settings,
             'saveUrl' => $this->urlGenerator->linkToRoute('timesheets.admin.save'),
+            'resetStatusUrl' => $this->urlGenerator->linkToRoute('timesheets.recordReset.status'),
+            'resetApproveUrl' => $this->urlGenerator->linkToRoute('timesheets.recordReset.approve'),
+            'resetCancelUrl' => $this->urlGenerator->linkToRoute('timesheets.recordReset.cancel'),
             'locations' => $this->locations->settings(),
             'locationCountries' => $this->locations->countries(),
             'locationStates' => $this->locations->usStates(),

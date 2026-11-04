@@ -92,6 +92,8 @@ try {
     $groupAdminGrant = ['type' => 'group', 'id' => $group->getGID(),
         'shift' => false, 'job' => false, 'admin' => true];
     savePolicy(true, [$groupAdminGrant]);
+    $enabledAdmins = $access->administrators();
+    check(in_array($id, $enabledAdmins, true), 'Deletion electorate includes enabled delegated administrator group members');
     check($access->isTimesheetsAdmin($id),
         'Group assignment grants Timesheets administration independently of tracking permissions');
     savePolicy(false, [$groupAdminGrant]);
@@ -150,6 +152,7 @@ try {
     check($clock->current($id) === null && count($page->index()->getParams()['entries']) === 1,
         'Revoked user can close an active shift and continue viewing history');
     $user->setEnabled(false);
+    check(!in_array($id, $access->administrators(), true), 'Deletion electorate excludes disabled administrator accounts');
     savePolicy(false, [$directAdminGrant]);
     check(!$access->permissions($id)['access'], 'Disabled accounts do not receive unrestricted permission');
     check(!$access->isTimesheetsAdmin($id), 'Disabled accounts cannot use delegated administration');

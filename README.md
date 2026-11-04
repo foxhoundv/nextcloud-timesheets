@@ -11,7 +11,7 @@ Native Nextcloud app for employee work shifts, Job intervals, shop-time totals, 
 
 ## App versioning
 
-Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `2.1.1` follows this format.
+Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `3.1.2` follows this format.
 
 Before changing the app version for an update, ask the project owner whether it is a **Major**, **Minor**, or **Sub-minor** change; do not choose a level or bump the version without that answer. Increment the selected component and reset any lower-order components to 1: a sub-minor update changes only the last component, a minor update resets Sub-minor to 1, and a major update resets Minor and Sub-minor to 1. For example, `0.1.15` to `0.1.16` is Sub-minor, `0.1.99` to `0.2.1` is Minor, and `0.9.99` to `1.1.1` is Major.
 
@@ -174,9 +174,27 @@ An additive migration adds nullable rounding fields to shifts and jobs without c
 
 On the testing server, run `php apps/timesheets/tests/rounding.php /path/to/nextcloud` for every interval's second-level boundaries, half-up ties, independent switches, clock-out snapshots, immutable history, actual overlap preservation, legacy records, invalid-input rollback, and stale close protection. The test restores original settings and removes its temporary account/intervals. The HTTP entry-point suite verifies administration persistence, validation, and omission compatibility. Use only the testing instance when other testing users are idle; adjust for `custom_apps`.
 
+### Deleting testing records
+
+**Timesheet Administration > Delete testing records** offers **Delete all records**. The confirmation modal is centered vertically and horizontally in the visible viewport. Both the administration page and modal show current shift/Job counts, including active intervals, and any pending approval totals and expiration time. Type the exact uppercase word `DELETE` and choose **Yes - Delete** to give your own approval.
+
+Every enabled Nextcloud administrator and enabled delegated Timesheets administrator must approve the same request individually, including members of groups granted Timesheets administration. Account IDs are listed with their approval status; use **Refresh approval status** or reload the page to see other approvals. One administrator cannot vote for another. With a single administrator, confirmation deletes immediately; otherwise no logs are deleted until the final required approval.
+
+Requests expire after 24 hours. Changes to database logs or the enabled administrator list invalidate previous approvals and require renewed confirmation. Any administrator can select **Cancel deletion request**. The modal's **No - Go back** closes it without giving approval; it does not cancel another administrator's existing request.
+
+Deletion is permanent within the app and includes all historical and active shift/Job intervals for every employee. Active timers are reset; employees must reload and clock in again. Administration settings, access assignments, and Nextcloud files are untouched. Existing Excel files are neither deleted nor rewritten by this action. Future normal report generation/Job synchronization still rebuilds workbooks from the database as usual, so files are not a permanent archival guarantee.
+
+Deletion approvals and clock transitions use a shared database lock to prevent the final approval from racing clock-in/out. The database deletion is transactional; failed requests do not leave partially deleted logs. This feature is intended for clearing test scenarios, not employee self-service or payroll record retention.
+
+On the testing server, run `php apps/timesheets/tests/record-reset.php /path/to/nextcloud`. Its destructive cases execute inside a verified outer rollback transaction: all original logs, active intervals, and request state must be restored at the end. The HTTP suite checks administrator authorization, CSRF, confirmation validation, and status/modal wiring without completing a real unanimous deletion.
+
 ### Shared storage and workbook reports
 
 Nextcloud administrators and delegated Timesheets administrators can choose two existing writable folders with Nextcloud's folder picker: a payroll-timesheets root and a Job files root. The selected paths are stored relative to the account that chose them. Share these folders with the appropriate administrators; generated files follow Nextcloud's normal file-sharing permissions. Timesheets records remain in the database. Payroll workbooks are generated on demand; Job workbooks update automatically.
+
+All generated payroll and Job workbooks size each column to its longest heading or value with a small readability margin, using the workbook's Calibri 11 font metrics for standard characters and estimated widths for Unicode characters. Very long text wraps instead of making the sheet excessively wide (columns are capped at 60 spreadsheet character units); row heights expand for wrapped text and explicit line breaks, within Excel's row-height limit. This formatting applies when a workbook is generated or updated; existing files are not rewritten until then. Saved time records and totals are unchanged.
+
+On the testing server, run `php apps/timesheets/tests/workbook.php /path/to/nextcloud` to verify font-based widths, wrapping styles, row heights, Unicode text, and preserved cell values. The storage suite checks that both payroll and Job exports include this formatting.
 
 Payroll reports generate one XLSX per employee with completed shifts in the selected period. Save the **Weekly payroll workweek** in storage settings to choose its first weekday and see the corresponding end weekday. A week always includes seven days, including weekends; the default is Monday through Sunday. For example, Sunday through Saturday includes both boundary dates. Monthly reports use calendar months and are unaffected by the weekly setting. Choose any date in the requested period. Each workbook includes local clock-in/out times, actual and reported durations, the captured rounding interval, and totals. Files are placed in a URL-encoded account-ID subfolder of the payroll root and replaced when regenerated for the same period. Employees without completed shifts in the period do not get an empty workbook. Bi-weekly reports are not enabled until the pay-period anchor date is configured.
 
@@ -244,7 +262,7 @@ The existing `.gitignore` rules exclude `.env` from Git. Keep real credentials o
 
 ## Development status
 
-This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time and optional saved rounding, configurable shift/job interaction, completed-shift job/shop breakdowns, post-clock-out long-shift reminders, unpaid breaks as gaps between separate shifts, user/group tracking grants, delegated Timesheets administration, shared storage roots, automatic Job XLSX workbooks, and on-demand payroll reports with configurable weekly boundaries and country/region allocations. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. PHP lint and the work-location, shift/Job clock, storage, rounding, access, shop-time, and HTTP regression suites pass on that server. The 2.1.1 upgrade verified settings, history, and active shift/Job timer persistence; existing intervals remain unassigned rather than receiving invented locations. Printable views remain planned.
+This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time and optional saved rounding, configurable shift/job interaction, completed-shift job/shop breakdowns, post-clock-out long-shift reminders, unpaid breaks as gaps between separate shifts, user/group tracking grants, delegated Timesheets administration, shared storage roots, automatic Job XLSX workbooks, payroll reports with configurable weekly boundaries and country/region allocations, and unanimous administrator deletion of testing logs. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. PHP lint and the reset, work-location, shift/Job clock, workbook/storage, access, and HTTP regression suites pass on that server. The 3.1.1 upgrade verified settings, history, located records, and active shift/Job timer persistence. Destructive tests restore all original logs and approval state using an outer rollback transaction. Printable views remain planned.
 
 ## Longer-term direction
 
