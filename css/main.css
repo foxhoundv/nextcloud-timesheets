@@ -13,7 +13,12 @@
     border-radius: 8px;
 }
 
-#timesheets-reset-dialog {
+#timesheets-reset-dialog:not([open]) {
+    display: none;
+}
+
+#timesheets-reset-dialog[open] {
+    display: block;
     position: fixed;
     inset: 0;
     margin: auto;

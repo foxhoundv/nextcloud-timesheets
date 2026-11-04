@@ -11,7 +11,7 @@ Native Nextcloud app for employee work shifts, Job intervals, shop-time totals, 
 
 ## App versioning
 
-Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `3.1.2` follows this format.
+Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `3.1.3` follows this format.
 
 Before changing the app version for an update, ask the project owner whether it is a **Major**, **Minor**, or **Sub-minor** change; do not choose a level or bump the version without that answer. Increment the selected component and reset any lower-order components to 1: a sub-minor update changes only the last component, a minor update resets Sub-minor to 1, and a major update resets Minor and Sub-minor to 1. For example, `0.1.15` to `0.1.16` is Sub-minor, `0.1.99` to `0.2.1` is Minor, and `0.9.99` to `1.1.1` is Major.
 
@@ -176,7 +176,7 @@ On the testing server, run `php apps/timesheets/tests/rounding.php /path/to/next
 
 ### Deleting testing records
 
-**Timesheet Administration > Delete testing records** offers **Delete all records**. The confirmation modal is centered vertically and horizontally in the visible viewport. Both the administration page and modal show current shift/Job counts, including active intervals, and any pending approval totals and expiration time. Type the exact uppercase word `DELETE` and choose **Yes - Delete** to give your own approval.
+**Timesheet Administration > Delete testing records** offers **Delete all records**. The confirmation modal stays hidden until that button is selected, is centered vertically and horizontally in the visible viewport, and closes when **No - Go back** is selected. Both the administration page and modal show current shift/Job counts, including active intervals, and any pending approval totals and expiration time. Type the exact uppercase word `DELETE` and choose **Yes - Delete** to give your own approval.
 
 Every enabled Nextcloud administrator and enabled delegated Timesheets administrator must approve the same request individually, including members of groups granted Timesheets administration. Account IDs are listed with their approval status; use **Refresh approval status** or reload the page to see other approvals. One administrator cannot vote for another. With a single administrator, confirmation deletes immediately; otherwise no logs are deleted until the final required approval.
 
