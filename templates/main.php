@@ -77,14 +77,14 @@ $entries = $_['entries'];
         <?php elseif ($_['jobRequiresShift'] && $_['activeShift'] === null): ?>
             <p><?php p($l->t('Clock into a shift before starting a job.')); ?></p>
         <?php else: ?>
-            <p><?php p($l->t('No job is active. Enter a Sales Order or job reference to begin.')); ?></p>
+            <p><?php p($l->t('No job is active. Enter a Job ID to begin.')); ?></p>
         <?php endif; ?>
         <?php if ($_['activeJob'] !== null || ($_['jobTrackingEnabled'] && $_['canStartJob'] && (!$_['jobRequiresShift'] || $_['activeShift'] !== null))): ?>
             <form id="timesheets-job-form" method="post" action="<?php p($_['activeJob'] === null ? $_['jobClockInUrl'] : $_['jobClockOutUrl']); ?>">
                 <?php if ($_['activeJob'] !== null): ?>
                     <input type="hidden" name="jobId" value="<?php p((string) $_['activeJob']['id']); ?>">
                 <?php else: ?>
-                    <label for="timesheets-job-reference"><?php p($l->t('Sales Order / job reference')); ?></label>
+                    <label for="timesheets-job-reference"><?php p($l->t('Job ID')); ?></label>
                     <input id="timesheets-job-reference" name="reference" type="text" required maxlength="255" aria-describedby="timesheets-job-help">
                 <?php endif; ?>
                 <button type="submit" class="primary"><?php p($l->t($_['activeJob'] === null ? 'Start job' : 'End job')); ?></button>
@@ -92,7 +92,7 @@ $entries = $_['entries'];
             </form>
             <noscript><p><?php p($l->t('Enable JavaScript to start and end jobs.')); ?></p></noscript>
         <?php endif; ?>
-        <p id="timesheets-job-help" class="timesheets-clock-help"><?php p($l->t('One job can be active at a time. Job intervals are recorded separately from shifts; do not add job time to shift time as extra work. References are labels only, not linked to folders yet.')); ?></p>
+        <p id="timesheets-job-help" class="timesheets-clock-help"><?php p($l->t('One job can be active at a time. Job intervals are recorded separately from shifts; do not add job time to shift time as extra work.')); ?></p>
     </section>
 
     <section aria-labelledby="timesheets-overview">

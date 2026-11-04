@@ -3,7 +3,7 @@
         [
             ['timesheets-storage-form', 'timesheets-storage-status'],
             ['timesheets-payroll-report-form', 'timesheets-payroll-status'],
-            ['timesheets-sales-order-report-form', 'timesheets-sales-order-status'],
+            ['timesheets-job-report-form', 'timesheets-job-status'],
         ].forEach(function(ids) {
             const form = document.getElementById(ids[0]);
             const status = document.getElementById(ids[1]);
@@ -39,6 +39,41 @@
                 } finally {
                     button.disabled = false;
                 }
+            });
+        });
+
+        document.querySelectorAll('[data-folder-picker]').forEach(function(button) {
+            button.addEventListener('click', function() {
+                const input = document.getElementById(button.dataset.folderPicker);
+                const status = document.getElementById('timesheets-storage-status');
+                if (!input || !status) {
+                    return;
+                }
+                if (typeof OC === 'undefined' || !OC.dialogs || typeof OC.dialogs.filepicker !== 'function') {
+                    status.textContent = t('timesheets', 'The Nextcloud folder picker is unavailable. Reload the page and try again.');
+                    return;
+                }
+                OC.dialogs.filepicker(
+                    t('timesheets', 'Choose a folder'),
+                    function(path) {
+                        if (typeof path !== 'string') {
+                            return;
+                        }
+                        const relativePath = path.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+                        if (!relativePath) {
+                            status.textContent = t('timesheets', 'Choose a folder inside your files, not the files root.');
+                            return;
+                        }
+                        input.value = relativePath;
+                        status.textContent = '';
+                    },
+                    false,
+                    'httpd/unix-directory',
+                    true,
+                    OC.dialogs.FILEPICKER_TYPE_CHOOSE,
+                    '/',
+                    { allowDirectoryChooser: true }
+                );
             });
         });
     }

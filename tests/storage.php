@@ -90,7 +90,17 @@ function workbookSheet(string $content): string {
 }
 
 $config = Server::get(IConfig::class);
-$configKeys = ['storage_owner', 'payroll_storage_root', 'sales_order_storage_root'];
+$configKeys = [
+    'storage_owner',
+    'payroll_storage_root',
+    'sales_order_storage_root',
+    'job_reference_format',
+    'job_year_base',
+    'job_folder_template',
+    'job_group_first_end',
+    'job_group_size',
+    'job_group_name_format',
+];
 $existingKeys = $config->getAppKeys('timesheets');
 $previous = [];
 foreach ($configKeys as $key) {
@@ -116,20 +126,38 @@ try {
     $baseFolder = $rootFolder->getUserFolder($userId)->newFolder($baseName);
     check($baseFolder instanceof Folder, 'Test storage root created in the account files');
     $baseFolder->newFolder('Payroll');
-    $salesRoot = $baseFolder->newFolder('Sales Orders');
-    $orderFolder = $salesRoot->newFolder('SO-123 - Customer');
-    $storage->saveRoots($userId, $baseName . '/Payroll', $baseName . '/Sales Orders');
+    $jobRoot = $baseFolder->newFolder('Sales Order');
+    $yearFolder = $jobRoot->newFolder('2026');
+    $firstGroup = $yearFolder->newFolder('1-99');
+    $orderFolder = $firstGroup->newFolder('SO260001 - Customer');
+    $storage->saveRoots($userId, $baseName . '/Payroll', $baseName . '/Sales Order');
     check($storage->settings() === [
         'owner' => $userId,
         'payrollRoot' => $baseName . '/Payroll',
-        'salesOrderRoot' => $baseName . '/Sales Orders',
+        'jobRoot' => $baseName . '/Sales Order',
+        'jobReferenceFormat' => 'SO{year:2}{sequence:4}',
+        'jobYearBase' => '2000',
+        'jobFolderTemplate' => '{year}/{group}/{jobId}',
+        'jobGroupFirstEnd' => '99',
+        'jobGroupSize' => '100',
+        'jobGroupNameFormat' => '{start}-{end}',
     ], 'Writable shared roots are saved with their owning account');
-    rejects(fn () => $storage->saveRoots($userId, '../outside', $baseName . '/Sales Orders'), 400,
+    rejects(fn () => $storage->saveRoots($userId, '../outside', $baseName . '/Sales Order'), 400,
         'Storage roots reject parent-directory traversal');
     check($storage->settings()['payrollRoot'] === $baseName . '/Payroll',
         'Invalid storage paths do not overwrite saved roots');
-    rejects(fn () => $storage->saveRoots($userId, $baseName . '/missing', $baseName . '/Sales Orders'), 400,
+    rejects(fn () => $storage->saveRoots($userId, $baseName . '/missing', $baseName . '/Sales Order'), 400,
         'Storage roots must point to existing folders');
+    rejects(fn () => $storage->saveRoots(
+        $userId,
+        $baseName . '/Payroll',
+        $baseName . '/Sales Order',
+        'SO{year:2}{sequence:4}',
+        '2000',
+        '../{jobId}',
+    ), 400, 'Job folder templates reject traversal before saving any settings');
+    check($storage->settings()['jobFolderTemplate'] === '{year}/{group}/{jobId}',
+        'Invalid Job folder templates do not overwrite the saved configuration');
 
     $shift = new Shift();
     $shift->setUserId($userId);
@@ -215,7 +243,7 @@ try {
 
     $job = new Job();
     $job->setUserId($userId);
-    $job->setJobReference('SO-123');
+    $job->setJobReference('SO260001');
     $job->setJobDate('2026-11-03');
     $job->setClockIn('2026-11-03 17:00:00');
     $job->setClockOut('2026-11-03 17:30:00');
@@ -227,7 +255,7 @@ try {
 
     $similarJob = new Job();
     $similarJob->setUserId($otherUserId);
-    $similarJob->setJobReference('SO-1234');
+    $similarJob->setJobReference('SO260002');
     $similarJob->setJobDate('2026-11-03');
     $similarJob->setClockIn('2026-11-03 18:00:00');
     $similarJob->setClockOut('2026-11-03 18:30:00');
@@ -239,27 +267,59 @@ try {
 
     $openJob = new Job();
     $openJob->setUserId($userId);
-    $openJob->setJobReference('SO-123');
+    $openJob->setJobReference('SO260001');
     $openJob->setJobDate('2026-11-04');
     $openJob->setClockIn('2026-11-04 08:00:00');
     $openJob->setTimeZone('UTC');
     $testJobs[] = $jobMapper->insert($openJob);
 
-    $salesOrder = $storage->generateSalesOrder('SO-123');
-    check($salesOrder['count'] === 1 && $salesOrder['folder'] === 'SO-123 - Customer/Time logs/Time logs.xlsx',
-        'Sales Order export matches a folder by its starting name and creates its Time logs workbook');
-    $jobFile = $rootFolder->getUserFolder($userId)->get($baseName . '/Sales Orders/SO-123 - Customer/Time logs/Time logs.xlsx');
+    $jobReport = $storage->generateJobReport('SO260001');
+    check($jobReport['count'] === 1
+        && $jobReport['folder'] === '2026/1-99/SO260001 - Customer/Time logs/Time logs.xlsx',
+        'Job report resolves the configured year and first-group path and matches the Job ID folder prefix');
+    $jobFile = $rootFolder->getUserFolder($userId)->get(
+        $baseName . '/Sales Order/2026/1-99/SO260001 - Customer/Time logs/Time logs.xlsx'
+    );
     $jobXml = workbookSheet($jobFile->getContent());
-    check(str_contains($jobXml, 'SO-123')
+    check(str_contains($jobXml, 'SO260001')
         && str_contains($jobXml, '0:30:00')
         && str_contains($jobXml, '0:45:00')
-        && !str_contains($jobXml, 'SO-1234'),
-        'Sales Order workbook includes completed exact-reference job rows and reported durations only');
-    $salesRoot->newFolder('SO-123 Secondary');
-    rejects(fn () => $storage->generateSalesOrder('SO-123'), 409,
-        'Ambiguous Sales Order prefix matches are rejected');
-    rejects(fn () => $storage->generateSalesOrder('SO-MISSING'), 404,
-        'Missing Sales Order folder matches are explicitly rejected');
+        && !str_contains($jobXml, 'SO260002'),
+        'Job workbook includes completed exact-ID intervals and reported durations only');
+    $yearFolder->newFolder('100-199')->newFolder('SO260100 - Another Customer');
+    check($storage->generateJobReport('SO260100')['folder']
+        === '2026/100-199/SO260100 - Another Customer/Time logs/Time logs.xlsx',
+        'Sequence 100 starts the next 100-number grouping folder');
+    $yearFolder->get('1-99')->newFolder('SO260099 - Last first-group Job');
+    check($storage->generateJobReport('SO260099')['folder']
+        === '2026/1-99/SO260099 - Last first-group Job/Time logs/Time logs.xlsx',
+        'Sequence 99 remains in the first grouping folder');
+    $firstGroup->newFolder('SO260001 Secondary');
+    rejects(fn () => $storage->generateJobReport('SO260001'), 409,
+        'Ambiguous Job ID folder prefix matches are rejected');
+    rejects(fn () => $storage->generateJobReport('SO260003'), 404,
+        'Missing Job folders are explicitly rejected');
+    rejects(fn () => $storage->generateJobReport('NOT-A-JOB'), 400,
+        'Job IDs that do not match the configured format are rejected');
+    rejects(fn () => $storage->generateJobReport('SO260000'), 400,
+        'Zero is rejected as a Job sequence number');
+
+    $customGroup = $jobRoot->newFolder('Jobs')->newFolder('1926')->newFolder('batch-10-to-19');
+    $customGroup->newFolder('AB260012 - Customer');
+    $storage->saveRoots(
+        $userId,
+        $baseName . '/Payroll',
+        $baseName . '/Sales Order',
+        'AB{year:2}{sequence:4}',
+        '1900',
+        'Jobs/{year}/{group}/{jobId}',
+        '9',
+        '10',
+        'batch-{start}-to-{end}',
+    );
+    check($storage->generateJobReport('AB260012')['folder']
+        === 'Jobs/1926/batch-10-to-19/AB260012 - Customer/Time logs/Time logs.xlsx',
+        'Custom Job ID, folder path, century, and grouping formats support other business structures');
 } finally {
     foreach ($testJobs as $entry) {
         $jobMapper->delete($entry);

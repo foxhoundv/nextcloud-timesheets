@@ -9,7 +9,7 @@ return [
         ['name' => 'admin#save', 'url' => '/settings', 'verb' => 'POST'],
         ['name' => 'storage#save', 'url' => '/settings/storage', 'verb' => 'POST'],
         ['name' => 'storage#payroll', 'url' => '/reports/payroll', 'verb' => 'POST'],
-        ['name' => 'storage#salesorder', 'url' => '/reports/sales-order', 'verb' => 'POST'],
+        ['name' => 'storage#job', 'url' => '/reports/job', 'verb' => 'POST'],
         ['name' => 'access#save', 'url' => '/settings/access', 'verb' => 'POST'],
         ['name' => 'access#search', 'url' => '/settings/access/search', 'verb' => 'GET'],
         ['name' => 'shift#clockIn', 'url' => '/api/v1/shifts/clock-in', 'verb' => 'POST'],

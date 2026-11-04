@@ -263,11 +263,15 @@ try {
     check($denied['status'] === 403, 'Regular account cannot save administration settings');
     $storageDenied = request('/index.php/apps/timesheets/settings/storage', [
         'payrollRoot' => 'payroll',
-        'salesOrderRoot' => 'sales-orders',
+        'jobRoot' => 'sales-orders',
     ], $token);
     check($storageDenied['status'] === 403,
         'Regular accounts cannot configure Timesheets storage (HTTP ' . $storageDenied['status'] . ': '
             . substr($storageDenied['body'], 0, 300) . ')');
+    $jobReportDenied = request('/index.php/apps/timesheets/reports/job', ['reference' => 'SO260001'], $token);
+    check($jobReportDenied['status'] === 403,
+        'Regular accounts cannot generate Job workbooks (HTTP ' . $jobReportDenied['status'] . ': '
+            . substr($jobReportDenied['body'], 0, 300) . ')');
 
     $settingsSaved = true;
     setTrackingOverHttp(true, $token);
@@ -326,11 +330,16 @@ try {
         'Administrator can open Timesheets administration settings (HTTP ' . $admin['status'] . ')');
     check(str_contains($admin['body'], 'timesheets-storage-form')
         && str_contains($admin['body'], 'timesheets-payroll-report-form')
-        && str_contains($admin['body'], 'timesheets-sales-order-report-form'),
+        && str_contains($admin['body'], 'timesheets-job-report-form')
+        && substr_count($admin['body'], 'data-folder-picker=') === 2
+        && str_contains($admin['body'], 'Job ID format')
+        && str_contains($admin['body'], 'Century for two-digit years')
+        && str_contains($admin['body'], 'SO{year:2}{sequence:4}')
+        && str_contains($admin['body'], '{year}/{group}/{jobId}'),
         'Administration includes shared storage configuration and on-demand workbook forms');
     check(request('/index.php/apps/timesheets/settings/storage', [
         'payrollRoot' => '../invalid',
-        'salesOrderRoot' => '../invalid',
+        'jobRoot' => '../invalid',
     ], $token)['status'] === 400,
         'Storage root save rejects unsafe relative paths without changing settings');
     check(str_contains($admin['body'], 'timesheets/js/admin.js'), 'Settings page loads the external save script');

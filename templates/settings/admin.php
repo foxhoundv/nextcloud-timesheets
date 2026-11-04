@@ -39,7 +39,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
         <div class="timesheets-admin-row">
             <div class="timesheets-setting-copy">
                 <label for="job_tracking"><?php p($l->t('Enable job tracking')); ?></label>
-                <p id="job_tracking_help"><?php p($l->t('Allow permitted users to start and end one job at a time using a Sales Order or job reference. Can be used without shift tracking. Completed shifts show job time and remaining shop time. References are not linked to folders yet. Disabling this prevents new jobs but lets users finish an active job.')); ?></p>
+                <p id="job_tracking_help"><?php p($l->t('Allow permitted users to start and end one job at a time using a Job ID. Can be used without shift tracking. Completed shifts show job time and remaining shop time. Disabling this prevents new jobs but lets users finish an active job.')); ?></p>
             </div>
             <input type="checkbox" id="job_tracking" name="job_tracking" value="1" aria-describedby="job_tracking_help" <?php echo !empty($settings['job_tracking']) ? 'checked' : ''; ?>>
         </div>
@@ -198,7 +198,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
     </form>
 
     <h2><?php p($l->t('Storage and reports')); ?></h2>
-    <p class="timesheets-intro"><?php p($l->t('Choose existing writable folders from the configured account\'s Nextcloud files. The paths are relative to that account, whose folders must be shared with anyone who needs the generated workbooks. Timesheets data remains in the Nextcloud database; workbooks are regenerated on demand.')); ?></p>
+    <p class="timesheets-intro"><?php p($l->t('Use the folder picker to choose existing writable locations from your Nextcloud files. The selected paths are saved relative to the account shown below; share the folders with administrators who need the generated workbooks. Timesheets data remains in the database; reports are generated on demand.')); ?></p>
     <p><?php p($l->t('Storage account: %s', [$_['storage']['owner'] !== '' ? $_['storage']['owner'] : $l->t('Not configured')])); ?></p>
     <form id="timesheets-storage-form" method="post" action="<?php p($_['storageSaveUrl']); ?>">
         <fieldset>
@@ -206,16 +206,64 @@ foreach ($_['accessDirectory'] as $type => $entries) {
             <div class="timesheets-admin-row">
                 <div class="timesheets-setting-copy">
                     <label for="payroll_storage_root"><?php p($l->t('Payroll timesheets folder')); ?></label>
-                    <p id="payroll_storage_root_help"><?php p($l->t('Path to an existing writable shared folder for per-user payroll workbooks, relative to the Nextcloud account shown above.')); ?></p>
+                    <p id="payroll_storage_root_help"><?php p($l->t('Select the existing writable folder where per-user payroll workbooks will be saved.')); ?></p>
                 </div>
-                <input type="text" id="payroll_storage_root" name="payrollRoot" required maxlength="1024" aria-describedby="payroll_storage_root_help" value="<?php p($_['storage']['payrollRoot']); ?>">
+                <div class="timesheets-folder-picker-control">
+                    <input type="text" id="payroll_storage_root" name="payrollRoot" required maxlength="1024" readonly aria-describedby="payroll_storage_root_help" value="<?php p($_['storage']['payrollRoot']); ?>" placeholder="<?php p($l->t('No folder selected')); ?>">
+                    <button type="button" class="secondary" data-folder-picker="payroll_storage_root"><?php p($l->t('Choose folder')); ?></button>
+                </div>
             </div>
             <div class="timesheets-admin-row">
                 <div class="timesheets-setting-copy">
-                    <label for="sales_order_storage_root"><?php p($l->t('Sales Orders folder')); ?></label>
-                    <p id="sales_order_storage_root_help"><?php p($l->t('Path to an existing writable shared folder containing one folder per Sales Order. A folder name may continue after the entered reference; ambiguous starting-name matches are rejected.')); ?></p>
+                    <label for="job_storage_root"><?php p($l->t('Job files folder')); ?></label>
+                    <p id="job_storage_root_help"><?php p($l->t('Choose the top-level folder containing your year and grouping folders (for example, the `Sales Order` folder).')); ?></p>
                 </div>
-                <input type="text" id="sales_order_storage_root" name="salesOrderRoot" required maxlength="1024" aria-describedby="sales_order_storage_root_help" value="<?php p($_['storage']['salesOrderRoot']); ?>">
+                <div class="timesheets-folder-picker-control">
+                    <input type="text" id="job_storage_root" name="jobRoot" required maxlength="1024" readonly aria-describedby="job_storage_root_help" value="<?php p($_['storage']['jobRoot']); ?>" placeholder="<?php p($l->t('No folder selected')); ?>">
+                    <button type="button" class="secondary" data-folder-picker="job_storage_root"><?php p($l->t('Choose folder')); ?></button>
+                </div>
+            </div>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="job_reference_format"><?php p($l->t('Job ID format')); ?></label>
+                    <p id="job_reference_format_help"><?php p($l->t('Describe the ID using literal text plus {year:2} or {year:4} and exactly one {sequence:N}. N is the digit count. Your company default is SO{year:2}{sequence:4}.')); ?></p>
+                </div>
+                <input type="text" id="job_reference_format" name="jobReferenceFormat" required maxlength="255" aria-describedby="job_reference_format_help" value="<?php p($_['storage']['jobReferenceFormat']); ?>">
+            </div>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="job_year_base"><?php p($l->t('Century for two-digit years')); ?></label>
+                    <p id="job_year_base_help"><?php p($l->t('Use a century such as 2000 to expand a two-digit year: 26 becomes 2026.')); ?></p>
+                </div>
+                <input type="number" id="job_year_base" name="jobYearBase" required min="1000" max="9900" step="100" aria-describedby="job_year_base_help" value="<?php p($_['storage']['jobYearBase']); ?>">
+            </div>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="job_folder_template"><?php p($l->t('Folder path template')); ?></label>
+                    <p id="job_folder_template_help"><?php p($l->t('Path below the selected Job files folder. Available placeholders: {year}, {year2}, {sequence}, {group}, and {jobId}. Remove year placeholders if the Job ID format has no year. The final component must be {jobId}; folder names may add text after that ID.')); ?></p>
+                </div>
+                <input type="text" id="job_folder_template" name="jobFolderTemplate" required maxlength="1024" aria-describedby="job_folder_template_help" value="<?php p($_['storage']['jobFolderTemplate']); ?>">
+            </div>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="job_group_first_end"><?php p($l->t('First grouping range ends at')); ?></label>
+                    <p id="job_group_first_end_help"><?php p($l->t('The first group starts at 1 and ends at this sequence number (99 for your company).')); ?></p>
+                </div>
+                <input type="number" id="job_group_first_end" name="jobGroupFirstEnd" required min="1" max="999999999" aria-describedby="job_group_first_end_help" value="<?php p($_['storage']['jobGroupFirstEnd']); ?>">
+            </div>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="job_group_size"><?php p($l->t('Subsequent grouping range size')); ?></label>
+                    <p id="job_group_size_help"><?php p($l->t('Size of each later group (100 for your company: 100-199, 200-299, and so on).')); ?></p>
+                </div>
+                <input type="number" id="job_group_size" name="jobGroupSize" required min="1" max="999999999" aria-describedby="job_group_size_help" value="<?php p($_['storage']['jobGroupSize']); ?>">
+            </div>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="job_group_name_format"><?php p($l->t('Grouping folder name format')); ?></label>
+                    <p id="job_group_name_format_help"><?php p($l->t('Format the group folder name with {start} and {end}; your company default is {start}-{end}.')); ?></p>
+                </div>
+                <input type="text" id="job_group_name_format" name="jobGroupNameFormat" required maxlength="100" aria-describedby="job_group_name_format_help" value="<?php p($_['storage']['jobGroupNameFormat']); ?>">
             </div>
             <div class="timesheets-admin-actions">
                 <button type="submit" class="primary"><?php p($l->t('Save storage roots')); ?></button>
@@ -250,19 +298,19 @@ foreach ($_['accessDirectory'] as $type => $entries) {
         </fieldset>
     </form>
 
-    <form id="timesheets-sales-order-report-form" method="post" action="<?php p($_['salesOrderReportUrl']); ?>">
+    <form id="timesheets-job-report-form" method="post" action="<?php p($_['jobReportUrl']); ?>">
         <fieldset>
-            <legend><?php p($l->t('Generate a Sales Order time log')); ?></legend>
-            <p class="timesheets-fieldset-help"><?php p($l->t('Enter a job reference that matches the start of exactly one folder in the Sales Orders root. The completed job intervals for that exact reference are written to or replace Time logs/Time logs.xlsx.')); ?></p>
+            <legend><?php p($l->t('Generate a Job time log')); ?></legend>
+            <p class="timesheets-fieldset-help"><?php p($l->t('Enter a Job ID matching the configured format. The app builds its year/group path, finds the one folder whose name starts with that ID, and writes or replaces Time logs/Time logs.xlsx.')); ?></p>
             <div class="timesheets-admin-row">
                 <div class="timesheets-setting-copy">
-                    <label for="sales_order_reference"><?php p($l->t('Sales Order / job reference')); ?></label>
+                    <label for="job_reference"><?php p($l->t('Job ID')); ?></label>
                 </div>
-                <input type="text" id="sales_order_reference" name="reference" required maxlength="255">
+                <input type="text" id="job_reference" name="reference" required maxlength="255" placeholder="<?php p($l->t('For example, SO260001')); ?>">
             </div>
             <div class="timesheets-admin-actions">
-                <button type="submit" class="primary"><?php p($l->t('Generate Sales Order workbook')); ?></button>
-                <p id="timesheets-sales-order-status" role="status" aria-live="polite"></p>
+                <button type="submit" class="primary"><?php p($l->t('Generate Job workbook')); ?></button>
+                <p id="timesheets-job-status" role="status" aria-live="polite"></p>
             </div>
         </fieldset>
     </form>

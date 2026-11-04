@@ -26,13 +26,32 @@ class StorageController extends Controller {
     }
 
     #[NoAdminRequired]
-    public function save(string $payrollRoot, string $salesOrderRoot): JSONResponse {
+    public function save(
+        string $payrollRoot,
+        string $jobRoot,
+        string $jobReferenceFormat = 'SO{year:2}{sequence:4}',
+        string $jobYearBase = '2000',
+        string $jobFolderTemplate = '{year}/{group}/{jobId}',
+        string $jobGroupFirstEnd = '99',
+        string $jobGroupSize = '100',
+        string $jobGroupNameFormat = '{start}-{end}',
+    ): JSONResponse {
         $user = $this->userSession->getUser();
         if ($user === null || !$this->access->isTimesheetsAdmin($user->getUID())) {
             return $this->denied();
         }
         try {
-            $this->storage->saveRoots($user->getUID(), $payrollRoot, $salesOrderRoot);
+            $this->storage->saveRoots(
+                $user->getUID(),
+                $payrollRoot,
+                $jobRoot,
+                $jobReferenceFormat,
+                $jobYearBase,
+                $jobFolderTemplate,
+                $jobGroupFirstEnd,
+                $jobGroupSize,
+                $jobGroupNameFormat,
+            );
         } catch (\DomainException $error) {
             return $this->error($error);
         }
@@ -66,19 +85,19 @@ class StorageController extends Controller {
     }
 
     #[NoAdminRequired]
-    public function salesorder(string $reference): JSONResponse {
+    public function job(string $reference): JSONResponse {
         $user = $this->userSession->getUser();
         if ($user === null || !$this->access->isTimesheetsAdmin($user->getUID())) {
             return $this->denied();
         }
         try {
-            $report = $this->storage->generateSalesOrder($reference);
+            $report = $this->storage->generateJobReport($reference);
         } catch (\DomainException $error) {
             return $this->error($error);
         }
         return new JSONResponse([
             'status' => 'ok',
-            'message' => $this->l->t('Generated the Sales Order time log with %s completed job interval(s).',
+            'message' => $this->l->t('Generated the Job time log with %s completed interval(s).',
                 [$report['count']]),
             'file' => $report['folder'],
         ]);

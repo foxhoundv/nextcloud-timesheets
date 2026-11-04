@@ -1,6 +1,6 @@
 # Timesheets for Nextcloud
 
-Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-time totals, printable employee views, and on-demand XLSX reports.
+Native Nextcloud app for employee work shifts, Job intervals, shop-time totals, printable employee views, and on-demand XLSX reports.
 
 ## Compatibility
 
@@ -11,7 +11,7 @@ Native Nextcloud app for employee work shifts, Sales Order job intervals, shop-t
 
 ## App versioning
 
-Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `1.1.1` follows this format.
+Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `1.2.1` follows this format.
 
 Before changing the app version for an update, ask the project owner whether it is a **Major**, **Minor**, or **Sub-minor** change; do not choose a level or bump the version without that answer. Increment the selected component and reset any lower-order components to 1: a sub-minor update changes only the last component, a minor update resets Sub-minor to 1, and a major update resets Minor and Sub-minor to 1. For example, `0.1.15` to `0.1.16` is Sub-minor, `0.1.99` to `0.2.1` is Minor, and `0.9.99` to `1.1.1` is Major.
 
@@ -28,7 +28,7 @@ Before changing the app version for an update, ask the project owner whether it 
 - Job intervals are separate rows, one for each clock-in/out pair. Time in a completed shift outside job intervals counts as shop time.
 - Completed times display using the employee's current time-zone setting. An open interval retains its clock-in time zone through clock-out.
 - Employees use a print-ready app view. Generated workbook access is controlled by Nextcloud's normal file-sharing permissions; configure both storage roots so only the intended administrators can access or edit the reports. App access alone does not grant access to those folders.
-- Payroll workbooks are generated on demand per employee for a selected weekly or monthly period. Sales Order workbooks are generated on demand in the matching Sales Order folder under `Time logs`.
+- Payroll workbooks are generated on demand per employee for a selected weekly or monthly period. Job workbooks are generated on demand in the matched Job folder under `Time logs`.
 
 ## Development workflow
 
@@ -106,7 +106,7 @@ There is no paused shift, break timer, automatic deduction, or separate break pe
 
 ### Job clock-in/out and combined tracking
 
-Version 0.1.13 adds independent job intervals. Enable **Enable job tracking** and grant job permission (when restricted mode is on). On the dashboard, enter a Sales Order/job reference and select **Start job**; select **End job** to close that specific interval. Each user may have only one active job. References are trimmed labels of 1-255 characters without control characters; they do not select folders or verify Sales Orders yet. Reusing a reference creates another interval rather than overwriting history.
+Version 0.1.13 adds independent job intervals. Enable **Enable job tracking** and grant job permission (when restricted mode is on). On the dashboard, enter a Job ID and select **Start job**; select **End job** to close that specific interval. Each user may have only one active job. IDs are trimmed labels of 1-255 characters without control characters. Reusing an ID creates another interval rather than overwriting history.
 
 Job-only users do not need shift tracking. With both global modes enabled, **Combined shift and job tracking** appears in administration:
 
@@ -115,7 +115,7 @@ Job-only users do not need shift tracking. With both global modes enabled, **Com
 
 Rules are preserved when the combined-settings section is hidden. Existing open jobs can always be ended after global tracking is disabled or Timesheets permissions are revoked, and users retain their own job history. The shift-end policy still protects active intervals after such changes. Nextcloud account/app restrictions can still prevent access. Finish both job and shift before taking an unpaid break.
 
-Job timestamps are UTC, attributed to the local start date, with the original timezone retained while active and current user timezone used for completed history. Exact elapsed seconds include midnight, DST, and update downtime. Actual displayed durations use whole minutes without rounding; optional reported durations are separate. Job time is separate from shift time: do not add them together as extra work. Folder integration, exports, and confirmations remain future work.
+Job timestamps are UTC, attributed to the local start date, with the original timezone retained while active and current user timezone used for completed history. Exact elapsed seconds include midnight, DST, and update downtime. Actual displayed durations use whole minutes without rounding; optional reported durations are separate. Job time is separate from shift time: do not add them together as extra work. Administrators can generate job-folder workbooks on demand.
 
 Both job POST endpoints (`/api/v1/jobs/clock-in`, requiring `reference`, and `/api/v1/jobs/clock-out`, requiring `jobId`) require authentication and CSRF. Identity/time come from the server. A nullable unique open-user slot prevents duplicate active jobs; conditional updates reject stale closes. Shift and job transitions serialize through a per-user database row lock inside transactions so concurrent job-start/shift-end requests cannot bypass interaction rules.
 
@@ -159,13 +159,15 @@ On the testing server, run `php apps/timesheets/tests/rounding.php /path/to/next
 
 ### Shared storage and workbook reports
 
-Nextcloud administrators and delegated Timesheets administrators can configure two existing writable folders in the configured storage account's Nextcloud files: a payroll-timesheets root and a Sales Orders root. Paths are relative to the account that saves the roots. Share these folders with the appropriate administrators; generated files follow Nextcloud's normal file-sharing permissions. Timesheets records remain in the database, and workbooks can be regenerated on demand.
+Nextcloud administrators and delegated Timesheets administrators can choose two existing writable folders with Nextcloud's folder picker: a payroll-timesheets root and a Job files root. The selected paths are stored relative to the account that chose them. Share these folders with the appropriate administrators; generated files follow Nextcloud's normal file-sharing permissions. Timesheets records remain in the database, and workbooks can be regenerated on demand.
 
 Payroll reports generate one XLSX per employee with completed shifts in the selected period. Weekly reports use Monday through Sunday; monthly reports use calendar months. Choose any date in the requested period. Each workbook includes local clock-in/out times, actual and reported durations, the captured rounding interval, and totals. Files are placed in a URL-encoded account-ID subfolder of the payroll root and replaced when regenerated for the same period. Employees without completed shifts in the period do not get an empty workbook. Bi-weekly reports are not enabled until the pay-period anchor date is configured.
 
-For Sales Order reports, enter a job reference that matches the beginning of exactly one folder in the Sales Orders root (matching is case-insensitive). Ambiguous prefixes are rejected. The app creates or updates `Time logs/Time logs.xlsx` inside that folder with completed intervals for the exact entered reference, employee names and account IDs, local timestamps, actual and reported durations, rounding settings, and totals. Open jobs are excluded. This report is generated on demand; clocking in or out never depends on file-storage availability.
+For a Job report, enter a Job ID matching the configured ID format. The app resolves the year and sequence, calculates the grouping directory, then finds exactly one folder whose name starts with that ID; extra text after the ID is allowed. Ambiguous matches are rejected. It creates or updates `Time logs/Time logs.xlsx` in the matching folder with completed intervals for the exact entered ID, employee names and account IDs, local timestamps, actual and reported durations, rounding settings, and totals. Open jobs are excluded. This report is generated on demand; clocking in or out never depends on file-storage availability.
 
-On the testing server, run `php apps/timesheets/tests/storage.php /path/to/nextcloud` to verify root validation, weekly/monthly employee exports, exact Sales Order selection, ambiguity handling, and XLSX contents. The test creates and removes temporary accounts, files, and settings; run it only against the testing instance.
+The company defaults are `SO{year:2}{sequence:4}`, base century `2000`, and `{year}/{group}/{jobId}` below the selected Job files root. Thus `SO260001` resolves to year `2026`, sequence `1`, and grouping folder `1-99`; `SO260100` resolves to `100-199`. The first range ends at `99`, subsequent groups contain `100` sequence numbers, and group names use `{start}-{end}`. Administrators can configure the ID format, two-digit-year century, relative folder template, first-range boundary, subsequent group size, and group-name template for other organizations. ID formats support literal text, one `{sequence:N}` token, and an optional `{year:2}` or `{year:4}` token. Folder templates support `{year}`, `{year2}`, `{sequence}`, `{group}`, and a final `{jobId}` component. Group-name templates support `{start}` and `{end}`.
+
+On the testing server, run `php apps/timesheets/tests/storage.php /path/to/nextcloud` to verify root validation, weekly/monthly employee exports, the company Job ID/year/group structure, custom organization templates, ambiguity handling, and XLSX contents. The test creates and removes temporary accounts, files, and settings; run it only against the testing instance.
 
 ### Long-shift threshold reminder
 

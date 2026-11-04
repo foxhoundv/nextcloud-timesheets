@@ -3,8 +3,8 @@
   <id>timesheets</id>
   <name>Timesheets</name>
   <summary>Track employee shifts, job time, and shop time</summary>
-  <description>Employee timesheets with Sales Order job tracking, printable views, and on-demand XLSX reports.</description>
-  <version>1.1.1</version>
+  <description>Employee timesheets with job tracking, printable views, and on-demand XLSX reports.</description>
+  <version>1.2.1</version>
   <licence>agpl</licence>
   <author>foxhoundv</author>
   <namespace>Timesheets</namespace>

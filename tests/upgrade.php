@@ -91,6 +91,12 @@ $preferences = [
     'storage_owner' => '',
     'payroll_storage_root' => 'payroll-share/timesheets',
     'sales_order_storage_root' => 'sales-orders',
+    'job_reference_format' => 'AB-{year:4}-{sequence:5}',
+    'job_year_base' => '1900',
+    'job_folder_template' => 'Jobs/{year}/{group}/{jobId}',
+    'job_group_first_end' => '9',
+    'job_group_size' => '10',
+    'job_group_name_format' => 'batch-{start}-to-{end}',
 ];
 
 if ($phase === 'prepare') {
@@ -256,7 +262,13 @@ check($settings->getForm()->getParams()['shiftRoundingEnabled']
 check($settings->getForm()->getParams()['storage'] === [
     'owner' => $state['userId'],
     'payrollRoot' => 'payroll-share/timesheets',
-    'salesOrderRoot' => 'sales-orders',
+    'jobRoot' => 'sales-orders',
+    'jobReferenceFormat' => 'AB-{year:4}-{sequence:5}',
+    'jobYearBase' => '1900',
+    'jobFolderTemplate' => 'Jobs/{year}/{group}/{jobId}',
+    'jobGroupFirstEnd' => '9',
+    'jobGroupSize' => '10',
+    'jobGroupNameFormat' => 'batch-{start}-to-{end}',
 ], 'Configured storage roots survive upgrade');
 check(array_map('snapshot', $mapper->findByUser($state['userId'])) === $state['shifts'],
     'Historical and active shift fields are unchanged by upgrade');

@@ -272,6 +272,23 @@
     border: 1px solid var(--color-border-maxcontrast);
 }
 
+#timesheets-admin .timesheets-folder-picker-control {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 8px;
+    min-width: 0;
+}
+
+#timesheets-admin .timesheets-folder-picker-control input[readonly] {
+    cursor: default;
+}
+
+#timesheets-admin .timesheets-folder-picker-control button {
+    min-height: 44px;
+    margin: 0;
+}
+
 #timesheets-admin .timesheets-admin-row input[type="checkbox"] {
     appearance: auto;
     width: 22px;
@@ -396,5 +413,10 @@
     #timesheets-admin .timesheets-admin-row input[type="text"],
     #timesheets-admin .timesheets-admin-row input[type="date"] {
         max-width: 280px;
+    }
+
+    #timesheets-admin .timesheets-folder-picker-control {
+        grid-template-columns: minmax(0, 1fr);
+        max-width: 360px;
     }
 }

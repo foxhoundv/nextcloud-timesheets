@@ -33,21 +33,48 @@ class StorageService {
         return [
             'owner' => $this->config->getAppValue('timesheets', 'storage_owner', ''),
             'payrollRoot' => $this->config->getAppValue('timesheets', 'payroll_storage_root', ''),
-            'salesOrderRoot' => $this->config->getAppValue('timesheets', 'sales_order_storage_root', ''),
+            'jobRoot' => $this->config->getAppValue('timesheets', 'sales_order_storage_root', ''),
+            'jobReferenceFormat' => $this->config->getAppValue('timesheets', 'job_reference_format', 'SO{year:2}{sequence:4}'),
+            'jobYearBase' => $this->config->getAppValue('timesheets', 'job_year_base', '2000'),
+            'jobFolderTemplate' => $this->config->getAppValue('timesheets', 'job_folder_template', '{year}/{group}/{jobId}'),
+            'jobGroupFirstEnd' => $this->config->getAppValue('timesheets', 'job_group_first_end', '99'),
+            'jobGroupSize' => $this->config->getAppValue('timesheets', 'job_group_size', '100'),
+            'jobGroupNameFormat' => $this->config->getAppValue('timesheets', 'job_group_name_format', '{start}-{end}'),
         ];
     }
 
-    public function saveRoots(string $ownerId, string $payrollRoot, string $salesOrderRoot): void {
+    public function saveRoots(
+        string $ownerId,
+        string $payrollRoot,
+        string $jobRoot,
+        string $jobReferenceFormat = 'SO{year:2}{sequence:4}',
+        string $jobYearBase = '2000',
+        string $jobFolderTemplate = '{year}/{group}/{jobId}',
+        string $jobGroupFirstEnd = '99',
+        string $jobGroupSize = '100',
+        string $jobGroupNameFormat = '{start}-{end}',
+    ): void {
         $owner = $this->users->get($ownerId);
         if ($owner === null || !$owner->isEnabled()) {
             throw new \DomainException('The account used for the shared storage roots must exist and be enabled.', 400);
         }
         $payrollRoot = $this->validateRoot($ownerId, $payrollRoot, 'Payroll');
-        $salesOrderRoot = $this->validateRoot($ownerId, $salesOrderRoot, 'Sales Order');
+        $jobRoot = $this->validateRoot($ownerId, $jobRoot, 'Job');
+        $jobConfiguration = $this->validateJobConfiguration(
+            $jobReferenceFormat,
+            $jobYearBase,
+            $jobFolderTemplate,
+            $jobGroupFirstEnd,
+            $jobGroupSize,
+            $jobGroupNameFormat,
+        );
 
         $this->config->setAppValue('timesheets', 'storage_owner', $ownerId);
         $this->config->setAppValue('timesheets', 'payroll_storage_root', $payrollRoot);
-        $this->config->setAppValue('timesheets', 'sales_order_storage_root', $salesOrderRoot);
+        $this->config->setAppValue('timesheets', 'sales_order_storage_root', $jobRoot);
+        foreach ($jobConfiguration as $key => $value) {
+            $this->config->setAppValue('timesheets', $key, $value);
+        }
     }
 
     public function generatePayroll(string $period, string $date): array {
@@ -98,42 +125,56 @@ class StorageService {
         return ['start' => $start, 'end' => $end, 'count' => count($files), 'files' => $files];
     }
 
-    public function generateSalesOrder(string $reference): array {
+    public function generateJobReport(string $reference): array {
         $reference = trim($reference);
         if ($reference === '' || !mb_check_encoding($reference, 'UTF-8')
             || mb_strlen($reference) > 255 || preg_match('/[\x00-\x1f\x7f]/u', $reference)) {
-            throw new \DomainException('Enter a valid Sales Order reference.', 400);
+            throw new \DomainException('Enter a valid Job ID.', 400);
         }
-        $root = $this->configuredRoot('sales_order_storage_root', 'Sales Order');
+        $settings = $this->settings();
+        $root = $this->configuredRoot('sales_order_storage_root', 'Job');
+        $parsed = $this->parseJobReference($reference, $settings);
+        $relativeFolder = $this->jobFolderPath($parsed, $reference, $settings);
+        $parts = explode('/', $relativeFolder);
+        $folderPrefix = array_pop($parts);
+        $parentPath = implode('/', $parts);
+        try {
+            $parent = $parentPath === '' ? $root : $root->get($parentPath);
+        } catch (NotFoundException $error) {
+            throw new \DomainException('The Job folder path was not found: ' . $parentPath, 404, $error);
+        }
+        if (!$parent instanceof Folder) {
+            throw new \DomainException('The configured Job folder path is not a folder.', 400);
+        }
         $matches = [];
-        $prefix = mb_strtolower($reference, 'UTF-8');
-        foreach ($root->getDirectoryListing() as $node) {
+        $prefix = mb_strtolower($folderPrefix, 'UTF-8');
+        foreach ($parent->getDirectoryListing() as $node) {
             if ($node instanceof Folder
                 && str_starts_with(mb_strtolower($node->getName(), 'UTF-8'), $prefix)) {
                 $matches[] = $node;
             }
         }
         if ($matches === []) {
-            throw new \DomainException('No Sales Order folder starts with that reference.', 404);
+            throw new \DomainException('No Job folder starts with that ID in the configured path.', 404);
         }
         if (count($matches) !== 1) {
-            throw new \DomainException('More than one Sales Order folder starts with that reference. Enter a more specific reference.', 409);
+            throw new \DomainException('More than one Job folder starts with that ID. Make the folder structure more specific.', 409);
         }
 
-        $salesOrderFolder = $matches[0];
-        $logFolder = $salesOrderFolder->nodeExists('Time logs')
-            ? $salesOrderFolder->get('Time logs')
-            : $salesOrderFolder->newFolder('Time logs');
+        $jobFolder = $matches[0];
+        $logFolder = $jobFolder->nodeExists('Time logs')
+            ? $jobFolder->get('Time logs')
+            : $jobFolder->newFolder('Time logs');
         if (!$logFolder instanceof Folder) {
-            throw new \DomainException('The Sales Order Time logs path exists but is not a folder.', 400);
+            throw new \DomainException('The Job Time logs path exists but is not a folder.', 400);
         }
 
         $jobs = $this->jobs->findCompletedByReference($reference);
         $actualTotal = 0;
         $reportedTotal = 0;
         $rows = [
-            ['Sales Order time log', $reference],
-            ['Folder', $salesOrderFolder->getName()],
+            ['Job time log', $reference],
+            ['Folder', $jobFolder->getName()],
             [],
             ['Employee', 'Account', 'Job reference', 'Job date', 'Clock in', 'Clock out', 'Actual duration', 'Reported duration', 'Rounding interval (minutes)'],
         ];
@@ -167,11 +208,195 @@ class StorageService {
         $rows[] = ['Total', '', '', '', '', '', $this->duration($actualTotal), $this->duration($reportedTotal), ''];
         $fileName = 'Time logs.xlsx';
         $this->writeFile($logFolder, $fileName, $this->workbooks->write($rows));
+        $actualFolderPath = $parentPath === ''
+            ? $jobFolder->getName()
+            : $parentPath . '/' . $jobFolder->getName();
         return [
-            'folder' => $salesOrderFolder->getName() . '/Time logs/' . $fileName,
+            'folder' => $actualFolderPath . '/Time logs/' . $fileName,
             'count' => count($jobs),
             'reference' => $reference,
         ];
+    }
+
+    private function validateJobConfiguration(
+        string $referenceFormat,
+        string $yearBase,
+        string $folderTemplate,
+        string $groupFirstEnd,
+        string $groupSize,
+        string $groupNameFormat,
+    ): array {
+        $referenceFormat = trim($referenceFormat);
+        $folderTemplate = trim($folderTemplate);
+        $groupNameFormat = trim($groupNameFormat);
+        $yearBaseValue = filter_var($yearBase, FILTER_VALIDATE_INT);
+        $firstEndValue = filter_var($groupFirstEnd, FILTER_VALIDATE_INT);
+        $groupSizeValue = filter_var($groupSize, FILTER_VALIDATE_INT);
+        if ($referenceFormat === '' || strlen($referenceFormat) > 255 || str_contains($referenceFormat, '/')
+            || str_contains($referenceFormat, '\\') || preg_match('/[\x00-\x1f\x7f]/', $referenceFormat)) {
+            throw new \DomainException('Enter a valid Job ID format.', 400);
+        }
+        if ($yearBaseValue === false || $yearBaseValue < 1000 || $yearBaseValue > 9900 || $yearBaseValue % 100 !== 0) {
+            throw new \DomainException('The year base must be a century such as 1900 or 2000.', 400);
+        }
+        if ($firstEndValue === false || $firstEndValue < 1 || $firstEndValue > 999999999
+            || $groupSizeValue === false || $groupSizeValue < 1 || $groupSizeValue > 999999999) {
+            throw new \DomainException('Enter positive integer values for the Job grouping ranges.', 400);
+        }
+        if (strlen($folderTemplate) > 1024 || $folderTemplate === ''
+            || str_starts_with($folderTemplate, '/') || str_ends_with($folderTemplate, '/')
+            || str_contains($folderTemplate, '\\') || preg_match('/[\x00-\x1f\x7f]/', $folderTemplate)) {
+            throw new \DomainException('Enter a valid relative Job folder template.', 400);
+        }
+        $folderTokens = $this->templateTokens($folderTemplate, ['year', 'year2', 'sequence', 'group', 'jobId']);
+        $folderParts = explode('/', $folderTemplate);
+        if (end($folderParts) !== '{jobId}' || count(array_keys($folderTokens, 'jobId', true)) !== 1) {
+            throw new \DomainException('The Job folder template must end with {jobId}.', 400);
+        }
+        foreach ($folderParts as $part) {
+            if ($part === '' || $part === '.' || $part === '..') {
+                throw new \DomainException('The Job folder template contains an invalid path component.', 400);
+            }
+        }
+        $groupTokens = $this->templateTokens($groupNameFormat, ['start', 'end']);
+        if ($groupNameFormat === '' || strlen($groupNameFormat) > 100
+            || str_contains($groupNameFormat, '/') || str_contains($groupNameFormat, '\\')
+            || preg_match('/[\x00-\x1f\x7f]/', $groupNameFormat)
+            || $groupTokens === [] && (trim($groupNameFormat) === '.' || trim($groupNameFormat) === '..')) {
+            throw new \DomainException('Enter a valid one-folder-name grouping template.', 400);
+        }
+        $format = $this->compileReferenceFormat($referenceFormat);
+        if (str_contains($folderTemplate, '{year}') && $format['yearLength'] === null) {
+            throw new \DomainException('The {year} folder token requires a {year:2} or {year:4} in the Job ID format.', 400);
+        }
+        if (str_contains($folderTemplate, '{year2}') && $format['yearLength'] === null) {
+            throw new \DomainException('The {year2} folder token requires a year in the Job ID format.', 400);
+        }
+        return [
+            'job_reference_format' => $referenceFormat,
+            'job_year_base' => (string) $yearBaseValue,
+            'job_folder_template' => $folderTemplate,
+            'job_group_first_end' => (string) $firstEndValue,
+            'job_group_size' => (string) $groupSizeValue,
+            'job_group_name_format' => $groupNameFormat,
+        ];
+    }
+
+    private function templateTokens(string $template, array $allowed): array {
+        preg_match_all('/\{([^{}]*)\}/', $template, $matches);
+        foreach ($matches[1] as $token) {
+            if (!in_array($token, $allowed, true)) {
+                throw new \DomainException('The folder template contains an unsupported placeholder: {' . $token . '}.', 400);
+            }
+        }
+        $withoutTokens = preg_replace('/\{[^{}]*\}/', '', $template);
+        if (str_contains($withoutTokens, '{') || str_contains($withoutTokens, '}')) {
+            throw new \DomainException('The folder template contains unmatched braces.', 400);
+        }
+        return $matches[1];
+    }
+
+    private function compileReferenceFormat(string $format): array {
+        $parts = preg_split('/\{(year|sequence):(\d+)\}/', $format, -1, PREG_SPLIT_DELIM_CAPTURE);
+        if ($parts === false || count($parts) < 4) {
+            throw new \DomainException('The Job ID format must contain one {sequence:N} placeholder.', 400);
+        }
+        $pattern = '';
+        $yearLength = null;
+        $sequenceLength = null;
+        for ($index = 0; $index < count($parts); $index += 3) {
+            $literal = $parts[$index];
+            if (str_contains($literal, '{') || str_contains($literal, '}')) {
+                throw new \DomainException('The Job ID format contains an unsupported placeholder.', 400);
+            }
+            $pattern .= preg_quote($literal, '/');
+            if (isset($parts[$index + 2])) {
+                $kind = $parts[$index + 1];
+                $length = (int) $parts[$index + 2];
+                if ($length < 1 || $length > 10
+                    || ($kind === 'year' && !in_array($length, [2, 4], true))
+                    || ($kind === 'sequence' && $sequenceLength !== null)
+                    || ($kind === 'year' && $yearLength !== null)) {
+                    throw new \DomainException('The Job ID format has invalid or duplicate placeholders.', 400);
+                }
+                if ($kind === 'sequence') {
+                    $sequenceLength = $length;
+                    $pattern .= '(?<sequence>\d{' . $length . '})';
+                } else {
+                    $yearLength = $length;
+                    $pattern .= '(?<year>\d{' . $length . '})';
+                }
+            }
+        }
+        if ($sequenceLength === null) {
+            throw new \DomainException('The Job ID format must contain one {sequence:N} placeholder.', 400);
+        }
+        return [
+            'pattern' => '/^' . $pattern . '$/D',
+            'yearLength' => $yearLength,
+        ];
+    }
+
+    private function parseJobReference(string $reference, array $settings): array {
+        $format = $this->compileReferenceFormat($settings['jobReferenceFormat']);
+        if (preg_match($format['pattern'], $reference, $matches) !== 1) {
+            throw new \DomainException('The Job ID does not match the configured Job ID format.', 400);
+        }
+        $sequence = (int) $matches['sequence'];
+        if ($sequence < 1) {
+            throw new \DomainException('The Job sequence must be greater than zero.', 400);
+        }
+        $year = null;
+        $year2 = null;
+        if ($format['yearLength'] !== null) {
+            $yearValue = $matches['year'];
+            $year = $format['yearLength'] === 2
+                ? (string) ((int) $settings['jobYearBase'] + (int) $yearValue)
+                : $yearValue;
+            $year2 = substr($year, -2);
+        }
+        return [
+            'sequence' => $matches['sequence'],
+            'sequenceNumber' => $sequence,
+            'year' => $year,
+            'year2' => $year2,
+            'firstEnd' => (int) $settings['jobGroupFirstEnd'],
+            'groupSize' => (int) $settings['jobGroupSize'],
+            'groupNameFormat' => $settings['jobGroupNameFormat'],
+            'folderTemplate' => $settings['jobFolderTemplate'],
+        ];
+    }
+
+    private function jobFolderPath(array $parsed, string $reference, array $settings): string {
+        $sequence = $parsed['sequenceNumber'];
+        if ($sequence <= $parsed['firstEnd']) {
+            $start = 1;
+            $end = $parsed['firstEnd'];
+        } else {
+            $start = $parsed['firstEnd'] + 1
+                + intdiv($sequence - $parsed['firstEnd'] - 1, $parsed['groupSize']) * $parsed['groupSize'];
+            $end = $start + $parsed['groupSize'] - 1;
+        }
+        $group = strtr($parsed['groupNameFormat'], [
+            '{start}' => (string) $start,
+            '{end}' => (string) $end,
+        ]);
+        if ($group === '' || $group === '.' || $group === '..') {
+            throw new \DomainException('The Job grouping rule generated an invalid folder name.', 400);
+        }
+        $path = strtr($parsed['folderTemplate'], [
+            '{year}' => $parsed['year'] ?? '',
+            '{year2}' => $parsed['year2'] ?? '',
+            '{sequence}' => $parsed['sequence'],
+            '{group}' => $group,
+            '{jobId}' => $reference,
+        ]);
+        foreach (explode('/', $path) as $component) {
+            if ($component === '' || $component === '.' || $component === '..') {
+                throw new \DomainException('The configured Job folder template generated an invalid path.', 400);
+            }
+        }
+        return $path;
     }
 
     private function validateRoot(string $ownerId, string $path, string $label): string {
@@ -197,14 +422,15 @@ class StorageService {
 
     private function configuredRoot(string $key, string $label): Folder {
         $settings = $this->settings();
-        if ($settings['owner'] === '' || $settings[$key === 'payroll_storage_root' ? 'payrollRoot' : 'salesOrderRoot'] === '') {
+        $settingKey = $key === 'payroll_storage_root' ? 'payrollRoot' : 'jobRoot';
+        if ($settings['owner'] === '' || $settings[$settingKey] === '') {
             throw new \DomainException('Configure the ' . $label . ' storage root before generating workbooks.', 400);
         }
         $owner = $this->users->get($settings['owner']);
         if ($owner === null || !$owner->isEnabled()) {
             throw new \DomainException('The configured storage account is unavailable. Save the storage roots again.', 400);
         }
-        $path = $settings[$key === 'payroll_storage_root' ? 'payrollRoot' : 'salesOrderRoot'];
+        $path = $settings[$settingKey];
         try {
             $folder = $this->rootFolder->getUserFolder($settings['owner'])->get($path);
         } catch (NotFoundException $error) {
