@@ -198,7 +198,7 @@ foreach ($_['accessDirectory'] as $type => $entries) {
     </form>
 
     <h2><?php p($l->t('Storage and reports')); ?></h2>
-    <p class="timesheets-intro"><?php p($l->t('Use the folder picker to choose existing writable locations from your Nextcloud files. The selected paths are saved relative to the account shown below; share the folders with administrators who need the generated workbooks. Timesheets data remains in the database; reports are generated on demand.')); ?></p>
+    <p class="timesheets-intro"><?php p($l->t('Choose existing writable locations from your Nextcloud files. Paths are saved relative to the account below. Job workbooks are created on the first clock-in and updated on every clock-in and clock-out; payroll reports are generated on demand. Timesheets data remains in the database. Share these folders only with people who should see the workbooks.')); ?></p>
     <p><?php p($l->t('Storage account: %s', [$_['storage']['owner'] !== '' ? $_['storage']['owner'] : $l->t('Not configured')])); ?></p>
     <form id="timesheets-storage-form" method="post" action="<?php p($_['storageSaveUrl']); ?>">
         <fieldset>
@@ -265,6 +265,26 @@ foreach ($_['accessDirectory'] as $type => $entries) {
                 </div>
                 <input type="text" id="job_group_name_format" name="jobGroupNameFormat" required maxlength="100" aria-describedby="job_group_name_format_help" value="<?php p($_['storage']['jobGroupNameFormat']); ?>">
             </div>
+            <div class="timesheets-admin-row">
+                <div class="timesheets-setting-copy">
+                    <label for="payroll_week_start"><?php p($l->t('Weekly payroll workweek')); ?></label>
+                    <p id="payroll_week_start_help"><?php p($l->t('Select the first weekday. Each payroll week includes seven days, ending on the preceding weekday. Save storage settings before generating reports.')); ?></p>
+                </div>
+                <select id="payroll_week_start" name="payrollWeekStart" aria-describedby="payroll_week_start_help">
+                    <?php foreach ([
+                        '1' => 'Monday through Sunday',
+                        '2' => 'Tuesday through Monday',
+                        '3' => 'Wednesday through Tuesday',
+                        '4' => 'Thursday through Wednesday',
+                        '5' => 'Friday through Thursday',
+                        '6' => 'Saturday through Friday',
+                        '7' => 'Sunday through Saturday',
+                    ] as $day => $label): ?>
+                        <option value="<?php p((string) $day); ?>" <?php echo $_['storage']['payrollWeekStart'] === (string) $day ? 'selected' : ''; ?>><?php p($l->t($label)); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <p class="timesheets-fieldset-help"><?php p($l->t('Job clock-in requires a matching existing folder and a writable workbook. Missing or ambiguous folders must be resolved by an administrator. Clock-out still saves time if workbook storage is unavailable, and shows a warning.')); ?></p>
             <div class="timesheets-admin-actions">
                 <button type="submit" class="primary"><?php p($l->t('Save storage roots')); ?></button>
                 <p id="timesheets-storage-status" role="status" aria-live="polite"></p>
@@ -275,13 +295,13 @@ foreach ($_['accessDirectory'] as $type => $entries) {
     <form id="timesheets-payroll-report-form" method="post" action="<?php p($_['payrollReportUrl']); ?>">
         <fieldset>
             <legend><?php p($l->t('Generate payroll timesheets')); ?></legend>
-            <p class="timesheets-fieldset-help"><?php p($l->t('Generates one XLSX workbook for each employee with completed shifts in the selected period. Weekly periods run Monday through Sunday; monthly periods use calendar months. Bi-weekly reports are not enabled until the pay-period start date is configured.')); ?></p>
+            <p class="timesheets-fieldset-help"><?php p($l->t('Generates one XLSX workbook for each employee with completed shifts in the selected period. Weekly periods use the saved workweek above; monthly periods use calendar months. Bi-weekly reports are not enabled until the pay-period start date is configured.')); ?></p>
             <div class="timesheets-admin-row">
                 <div class="timesheets-setting-copy">
                     <label for="payroll_period"><?php p($l->t('Payroll period')); ?></label>
                 </div>
                 <select id="payroll_period" name="period">
-                    <option value="weekly"><?php p($l->t('Weekly (Monday-Sunday)')); ?></option>
+                    <option value="weekly"><?php p($l->t('Weekly (configured workweek)')); ?></option>
                     <option value="monthly"><?php p($l->t('Monthly (calendar month)')); ?></option>
                 </select>
             </div>
@@ -298,20 +318,4 @@ foreach ($_['accessDirectory'] as $type => $entries) {
         </fieldset>
     </form>
 
-    <form id="timesheets-job-report-form" method="post" action="<?php p($_['jobReportUrl']); ?>">
-        <fieldset>
-            <legend><?php p($l->t('Generate a Job time log')); ?></legend>
-            <p class="timesheets-fieldset-help"><?php p($l->t('Enter a Job ID matching the configured format. The app builds its year/group path, finds the one folder whose name starts with that ID, and writes or replaces Time logs/Time logs.xlsx.')); ?></p>
-            <div class="timesheets-admin-row">
-                <div class="timesheets-setting-copy">
-                    <label for="job_reference"><?php p($l->t('Job ID')); ?></label>
-                </div>
-                <input type="text" id="job_reference" name="reference" required maxlength="255" placeholder="<?php p($l->t('For example, SO260001')); ?>">
-            </div>
-            <div class="timesheets-admin-actions">
-                <button type="submit" class="primary"><?php p($l->t('Generate Job workbook')); ?></button>
-                <p id="timesheets-job-status" role="status" aria-live="polite"></p>
-            </div>
-        </fieldset>
-    </form>
 </div>

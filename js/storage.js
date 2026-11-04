@@ -3,7 +3,6 @@
         [
             ['timesheets-storage-form', 'timesheets-storage-status'],
             ['timesheets-payroll-report-form', 'timesheets-payroll-status'],
-            ['timesheets-job-report-form', 'timesheets-job-status'],
         ].forEach(function(ids) {
             const form = document.getElementById(ids[0]);
             const status = document.getElementById(ids[1]);

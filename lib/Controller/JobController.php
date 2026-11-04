@@ -38,15 +38,16 @@ class JobController extends Controller {
         if ($user === null) {
             return new JSONResponse(['message' => $this->l->t('Please sign in to record time.')], 401);
         }
+        $warning = null;
         try {
             if ($jobId === null) {
                 $this->clock->clockIn($user->getUID(), $reference);
             } else {
-                $this->clock->clockOut($user->getUID(), $jobId);
+                $warning = $this->clock->clockOut($user->getUID(), $jobId);
             }
         } catch (\DomainException $error) {
             return new JSONResponse(['message' => $this->l->t($error->getMessage())], $error->getCode());
         }
-        return new JSONResponse(['status' => 'ok']);
+        return new JSONResponse(['status' => 'ok', 'warning' => $warning === null ? null : $this->l->t($warning)]);
     }
 }

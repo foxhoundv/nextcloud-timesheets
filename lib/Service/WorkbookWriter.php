@@ -4,22 +4,24 @@ declare(strict_types=1);
 
 namespace OCA\Timesheets\Service;
 
+use OCP\Files\GenericFileException;
+
 class WorkbookWriter {
     public function write(array $rows): string {
         if (!class_exists(\ZipArchive::class)) {
-            throw new \RuntimeException('The PHP zip extension is required to generate Timesheets workbooks.');
+            throw new GenericFileException('The PHP zip extension is required to generate Timesheets workbooks.');
         }
 
         $path = tempnam(sys_get_temp_dir(), 'timesheets-xlsx-');
         if ($path === false) {
-            throw new \RuntimeException('Unable to allocate temporary storage for a Timesheets workbook.');
+            throw new GenericFileException('Unable to allocate temporary storage for a Timesheets workbook.');
         }
 
         $archive = new \ZipArchive();
         $opened = false;
         try {
             if ($archive->open($path, \ZipArchive::OVERWRITE) !== true) {
-                throw new \RuntimeException('Unable to open temporary storage for a Timesheets workbook.');
+                throw new GenericFileException('Unable to open temporary storage for a Timesheets workbook.');
             }
             $opened = true;
             $files = [
@@ -46,17 +48,17 @@ class WorkbookWriter {
             ];
             foreach ($files as $name => $content) {
                 if (!$archive->addFromString($name, $content)) {
-                    throw new \RuntimeException('Unable to write a Timesheets workbook component.');
+                    throw new GenericFileException('Unable to write a Timesheets workbook component.');
                 }
             }
             if (!$archive->close()) {
-                throw new \RuntimeException('Unable to finalize a Timesheets workbook.');
+                throw new GenericFileException('Unable to finalize a Timesheets workbook.');
             }
             $opened = false;
 
             $content = file_get_contents($path);
             if ($content === false) {
-                throw new \RuntimeException('Unable to read the generated Timesheets workbook.');
+                throw new GenericFileException('Unable to read the generated Timesheets workbook.');
             }
             return $content;
         } finally {

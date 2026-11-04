@@ -35,6 +35,7 @@ class StorageController extends Controller {
         string $jobGroupFirstEnd = '99',
         string $jobGroupSize = '100',
         string $jobGroupNameFormat = '{start}-{end}',
+        ?string $payrollWeekStart = null,
     ): JSONResponse {
         $user = $this->userSession->getUser();
         if ($user === null || !$this->access->isTimesheetsAdmin($user->getUID())) {
@@ -51,6 +52,7 @@ class StorageController extends Controller {
                 $jobGroupFirstEnd,
                 $jobGroupSize,
                 $jobGroupNameFormat,
+                $payrollWeekStart,
             );
         } catch (\DomainException $error) {
             return $this->error($error);
@@ -81,25 +83,6 @@ class StorageController extends Controller {
             'message' => $this->l->t('Generated %s employee workbook(s) for %s through %s.',
                 [$report['count'], $report['start'], $report['end']]),
             'files' => $report['files'],
-        ]);
-    }
-
-    #[NoAdminRequired]
-    public function job(string $reference): JSONResponse {
-        $user = $this->userSession->getUser();
-        if ($user === null || !$this->access->isTimesheetsAdmin($user->getUID())) {
-            return $this->denied();
-        }
-        try {
-            $report = $this->storage->generateJobReport($reference);
-        } catch (\DomainException $error) {
-            return $this->error($error);
-        }
-        return new JSONResponse([
-            'status' => 'ok',
-            'message' => $this->l->t('Generated the Job time log with %s completed interval(s).',
-                [$report['count']]),
-            'file' => $report['folder'],
         ]);
     }
 

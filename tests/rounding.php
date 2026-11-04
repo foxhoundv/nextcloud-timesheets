@@ -63,7 +63,10 @@ $jobs = new JobMapper($db);
 $access = Server::get(AccessService::class);
 $transaction = new ClockTransaction($db);
 $shiftClock = new ShiftClockService($shifts, $config, $time, $access, $transaction, $jobs, $rounding);
-$jobClock = new JobClockService($jobs, $shifts, $shiftClock, $access, $config, $time, $transaction, $rounding);
+$jobClock = new JobClockService($jobs, $shifts, $shiftClock, $access, $config, $time, $transaction, $rounding,
+    Server::get(\OCA\Timesheets\Service\StorageService::class), Server::get(\Psr\Log\LoggerInterface::class));
+require_once __DIR__ . '/JobStorageFixture.php';
+$storageFixture = new JobStorageFixture($id, ['SO0001', 'SO0002']);
 $session = Server::get(\OCP\IUserSession::class);
 $oldUser = $session->getUser();
 try {
@@ -109,7 +112,7 @@ try {
     $config->setAppValue('timesheets', 'job_rounding_enabled', '0');
     $time->timestamp = strtotime('2026-11-03 08:00:00 UTC');
     $shift = $shiftClock->clockIn($id);
-    $job = $jobClock->clockIn($id, 'SO-rounded');
+    $job = $jobClock->clockIn($id, 'SO0001');
     check($shifts->findByUser($id)[0]->getRoundedSeconds() === null
         && $jobs->findByUser($id)[0]->getRoundingInterval() === null,
         'Active intervals have no finalized rounding snapshot');
@@ -164,7 +167,7 @@ try {
         $config->setAppValue('timesheets', 'shift_rounding', '10');
         $config->setAppValue('timesheets', 'job_rounding', '30');
         $shift = $shiftClock->clockIn($id);
-        $job = $jobClock->clockIn($id, 'SO-independent');
+        $job = $jobClock->clockIn($id, 'SO0002');
         $time->timestamp += 301;
         $jobClock->clockOut($id, $job->getId());
         $shiftClock->clockOut($id, $shift->getId());
@@ -224,6 +227,7 @@ try {
         check(str_contains($error->getMessage(), 'invalid saved rounding'), 'Incomplete saved rounding snapshot surfaces an explicit error');
     }
 } finally {
+    $storageFixture->cleanup();
     $session->setUser($oldUser);
     foreach ($jobs->findByUser($id) as $job) {
         $jobs->delete($job);

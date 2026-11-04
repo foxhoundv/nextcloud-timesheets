@@ -50,7 +50,6 @@ class AdminSettings implements ISettings {
             'storage' => $this->storage->settings(),
             'storageSaveUrl' => $this->urlGenerator->linkToRoute('timesheets.storage.save'),
             'payrollReportUrl' => $this->urlGenerator->linkToRoute('timesheets.storage.payroll'),
-            'jobReportUrl' => $this->urlGenerator->linkToRoute('timesheets.storage.job'),
             'reportDate' => (new \DateTimeImmutable('now', new \DateTimeZone('UTC')))->format('Y-m-d'),
         ];
     }

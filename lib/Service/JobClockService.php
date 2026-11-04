@@ -10,6 +10,7 @@ use OCA\Timesheets\Db\JobMapper;
 use OCA\Timesheets\Db\ShiftMapper;
 use OCP\AppFramework\Utility\ITimeFactory;
 use OCP\IConfig;
+use Psr\Log\LoggerInterface;
 
 class JobClockService {
     public function __construct(
@@ -21,6 +22,8 @@ class JobClockService {
         private ITimeFactory $time,
         private ClockTransaction $transaction,
         private RoundingService $rounding,
+        private StorageService $storage,
+        private LoggerInterface $logger,
     ) {
     }
 
@@ -74,15 +77,21 @@ class JobClockService {
             $job->setTimeZone($zone->getName());
             $job->setJobDate($now->setTimezone($zone)->format('Y-m-d'));
             $job->setClockIn($now->format('Y-m-d H:i:s'));
-            return $this->jobs->insert($job);
-        });
+            $job = $this->jobs->insert($job);
+            $this->storage->synchronizeJob($reference);
+            return $job;
+        }, $reference);
     }
 
-    public function clockOut(string $userId, int $jobId): void {
+    public function clockOut(string $userId, int $jobId): ?string {
         if ($jobId <= 0) {
             throw new \DomainException('A valid job interval ID is required.', 400);
         }
-        $this->transaction->run($userId, function () use ($userId, $jobId): void {
+        $active = $this->jobs->findOpenForUser($userId);
+        if ($active === null || $active->getId() !== $jobId) {
+            throw new \DomainException('This job interval is no longer active. Refresh the page before trying again.', 409);
+        }
+        return $this->transaction->run($userId, function () use ($userId, $jobId): ?string {
             $job = $this->jobs->findOpenForUser($userId);
             if ($job === null || $job->getId() !== $jobId) {
                 throw new \DomainException('This job interval is no longer active. Refresh the page before trying again.', 409);
@@ -96,6 +105,15 @@ class JobClockService {
             if (!$this->jobs->closeJob($job, $now->format('Y-m-d H:i:s'), $seconds, $rounding['interval'], $rounding['seconds'])) {
                 throw new \DomainException('This job interval was changed by another request. Refresh the page.', 409);
             }
-        });
+            try {
+                $this->storage->synchronizeJob($job->getJobReference());
+            } catch (\DomainException $error) {
+                $this->logger->error('Unable to synchronize the Job workbook during clock-out.', [
+                    'app' => 'timesheets', 'jobId' => $jobId, 'exception' => $error,
+                ]);
+                return 'You are clocked out and your time is saved, but the Job workbook could not be updated. Contact your administrator. The next successful Job clock-in or clock-out will rebuild it from saved records.';
+            }
+            return null;
+        }, $active->getJobReference());
     }
 }

@@ -24,7 +24,7 @@ if (PHP_SAPI === 'cli' && ($argv[2] ?? '') === 'worker') {
     \OC_App::loadApps();
     try {
         if ($argv[4] === 'job') {
-            Server::get(JobClockService::class)->clockIn($argv[3], 'race');
+            Server::get(JobClockService::class)->clockIn($argv[3], 'SO0005');
         } else {
             Server::get(ShiftClockService::class)->clockOut($argv[3], (int) $argv[5]);
         }
@@ -72,7 +72,10 @@ $access = Server::get(AccessService::class);
 $transaction = new ClockTransaction($db);
 $rounding = Server::get(\OCA\Timesheets\Service\RoundingService::class);
 $shiftClock = new ShiftClockService($shifts, $config, $time, $access, $transaction, $jobs, $rounding);
-$jobClock = new JobClockService($jobs, $shifts, $shiftClock, $access, $config, $time, $transaction, $rounding);
+$jobClock = new JobClockService($jobs, $shifts, $shiftClock, $access, $config, $time, $transaction, $rounding,
+    Server::get(\OCA\Timesheets\Service\StorageService::class), Server::get(\Psr\Log\LoggerInterface::class));
+require_once __DIR__ . '/JobStorageFixture.php';
+$storageFixture = new JobStorageFixture($id, ['SO0001', 'SO0002', 'SO0003', 'SO0004', 'SO0005']);
 function rejects(callable $action, int $code, string $message): void {
     try {
         $action();
@@ -93,8 +96,8 @@ try {
     foreach (['', " \t ", str_repeat('x', 256), "SO\n1"] as $invalid) {
         rejects(fn () => $jobClock->clockIn($id, $invalid), 400, 'Invalid job reference is rejected');
     }
-    $job = $jobClock->clockIn($id, ' SO-1 <sample> ');
-    check($job->getJobReference() === 'SO-1 <sample>' && $job->getJobDate() === '2026-11-01',
+    $job = $jobClock->clockIn($id, ' SO0001 ');
+    check($job->getJobReference() === 'SO0001' && $job->getJobDate() === '2026-11-01',
         'Job-only mode trims reference and saves local start date');
     check($job->getClockIn() === '2026-11-02 07:55:00' && $job->getTimeZone() === 'America/Los_Angeles',
         'Job stores UTC timestamp and original timezone');
@@ -136,7 +139,7 @@ try {
     $config->setAppValue('timesheets', 'shift_end_job_policy', 'block');
     rejects(fn () => $jobClock->clockIn($id, 'SO-2'), 409, 'Combined mode can require an active shift');
     $shift = $shiftClock->clockIn($id);
-    $next = $jobClock->clockIn($id, 'SO-2');
+    $next = $jobClock->clockIn($id, 'SO0002');
     rejects(fn () => $jobClock->clockOut($id, $job->getId()), 409, 'Stale job clock-out cannot close a newer interval');
     rejects(fn () => $shiftClock->clockOut($id, $shift->getId()), 409, 'Default policy blocks shift clock-out with an active job');
     check($shiftClock->current($id)['id'] === $shift->getId(), 'Blocked shift clock-out leaves both intervals active');
@@ -153,7 +156,7 @@ try {
     $access->save(json_encode(['restricted' => true, 'grants' => [
         ['type' => 'user', 'id' => $id, 'shift' => false, 'job' => true],
     ]], JSON_THROW_ON_ERROR));
-    $independent = $jobClock->clockIn($id, 'SO-job-only');
+    $independent = $jobClock->clockIn($id, 'SO0003');
     check(!$jobClock->requiresShift($id), 'Job-only permission works independently even with both global modes enabled');
     $jobClock->clockOut($id, $independent->getId());
     $access->save(json_encode(['restricted' => true, 'grants' => [
@@ -164,7 +167,7 @@ try {
     $config->setAppValue('timesheets', 'job_require_shift', '0');
     $config->setUserValue($id, 'core', 'timezone', 'America/Los_Angeles');
     $time->timestamp = strtotime('2026-11-01 08:30:00 UTC');
-    $dst = $jobClock->clockIn($id, 'SO-DST');
+    $dst = $jobClock->clockIn($id, 'SO0004');
     $time->timestamp += 7200;
     $jobClock->clockOut($id, $dst->getId());
     $found = array_values(array_filter($jobs->findByUser($id), static fn ($row): bool => $row->getId() === $dst->getId()))[0];
@@ -203,6 +206,7 @@ try {
         check(($openJob === null) !== ($shifts->findOpenForUser($id) !== null),
             'Concurrent transitions leave a consistent active-shift/job state');
     } finally {
+        $storageFixture->cleanup();
         foreach ($processes as [$process, $pipes]) {
             if (is_resource($process)) {
                 proc_terminate($process);

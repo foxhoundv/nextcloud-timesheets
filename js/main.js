@@ -46,7 +46,7 @@
                     body: new URLSearchParams(new FormData(form)).toString(),
                 });
                 if (!response.ok) {
-                    if ([400, 403, 409].includes(response.status)) {
+                    if ([400, 403, 404, 409].includes(response.status)) {
                         const data = await response.json();
                         status.textContent = data.message || t('timesheets', 'Unable to record time. Refresh the page and try again.');
                         return;
@@ -56,6 +56,9 @@
                 const data = await response.json();
                 if (data.status !== 'ok') {
                     throw new Error('Unexpected time response');
+                }
+                if (data.warning) {
+                    window.alert(data.warning);
                 }
                 if (form.id === 'timesheets-clock-form' && data.longShiftConfirmation === true) {
                     const target = new URL(window.location.href);

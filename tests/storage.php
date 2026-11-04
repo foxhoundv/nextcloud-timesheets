@@ -7,12 +7,35 @@ use OCA\Timesheets\Db\JobMapper;
 use OCA\Timesheets\Db\Shift;
 use OCA\Timesheets\Db\ShiftMapper;
 use OCA\Timesheets\Service\StorageService;
+use OCA\Timesheets\Service\JobClockService;
 use OCP\Files\Folder;
 use OCP\IAppConfig;
 use OCP\IConfig;
 use OCP\Files\IRootFolder;
 use OCP\IUserManager;
 use OCP\Server;
+
+if (PHP_SAPI === 'cli' && ($argv[2] ?? '') === 'worker') {
+    define('OC_CONSOLE', 1);
+    require $argv[1] . '/lib/base.php';
+    \OC_App::loadApps();
+    try {
+        $workerClock = Server::get(JobClockService::class);
+        if ($argv[4] === 'in') {
+            echo $workerClock->clockIn($argv[3], 'SO260200')->getId();
+        } else {
+            $warning = $workerClock->clockOut($argv[3], (int) $argv[5]);
+            if ($warning !== null) {
+                throw new RuntimeException($warning);
+            }
+            echo 'closed';
+        }
+    } catch (Throwable $error) {
+        fwrite(STDERR, get_class($error) . ': ' . $error->getMessage());
+        exit(1);
+    }
+    exit(0);
+}
 
 if (PHP_SAPI !== 'cli') {
     http_response_code(404);
@@ -89,6 +112,39 @@ function workbookSheet(string $content): string {
     }
 }
 
+function concurrentClocks(string $root, array $workers): array {
+    $processes = [];
+    try {
+        foreach ($workers as [$userId, $action, $jobId]) {
+            $pipes = [];
+            $process = proc_open([PHP_BINARY, __FILE__, $root, 'worker', $userId, $action, (string) $jobId],
+                [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+            if (!is_resource($process)) {
+                throw new RuntimeException('Unable to start a concurrent Job workbook worker.');
+            }
+            fclose($pipes[0]);
+            $processes[] = [$process, $pipes];
+        }
+        $results = [];
+        foreach ($processes as [$process, $pipes]) {
+            $output = stream_get_contents($pipes[1]);
+            $error = stream_get_contents($pipes[2]);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            check(proc_close($process) === 0 && $error === '', 'Concurrent workbook worker completes: ' . $error);
+            $results[] = $output;
+        }
+        return $results;
+    } finally {
+        foreach ($processes as [$process, $pipes]) {
+            if (is_resource($process)) {
+                proc_terminate($process);
+                proc_close($process);
+            }
+        }
+    }
+}
+
 $config = Server::get(IConfig::class);
 $configKeys = [
     'storage_owner',
@@ -100,6 +156,11 @@ $configKeys = [
     'job_group_first_end',
     'job_group_size',
     'job_group_name_format',
+    'payroll_week_start',
+    'job_tracking',
+    'shift_tracking',
+    'job_require_shift',
+    'access_policy',
 ];
 $existingKeys = $config->getAppKeys('timesheets');
 $previous = [];
@@ -130,7 +191,7 @@ try {
     $yearFolder = $jobRoot->newFolder('2026');
     $firstGroup = $yearFolder->newFolder('1-99');
     $orderFolder = $firstGroup->newFolder('SO260001 - Customer');
-    $storage->saveRoots($userId, $baseName . '/Payroll', $baseName . '/Sales Order');
+    $storage->saveRoots($userId, $baseName . '/Payroll', $baseName . '/Sales Order', payrollWeekStart: '1');
     check($storage->settings() === [
         'owner' => $userId,
         'payrollRoot' => $baseName . '/Payroll',
@@ -141,6 +202,7 @@ try {
         'jobGroupFirstEnd' => '99',
         'jobGroupSize' => '100',
         'jobGroupNameFormat' => '{start}-{end}',
+        'payrollWeekStart' => '1',
     ], 'Writable shared roots are saved with their owning account');
     rejects(fn () => $storage->saveRoots($userId, '../outside', $baseName . '/Sales Order'), 400,
         'Storage roots reject parent-directory traversal');
@@ -206,6 +268,20 @@ try {
     $openShift->setTimeZone('UTC');
     $openShift->setStatus('open');
     $testShifts[] = $shiftMapper->insert($openShift);
+    foreach (['2026-11-01', '2026-11-07', '2026-11-08'] as $index => $boundaryDate) {
+        $boundaryShift = new Shift();
+        $boundaryShift->setUserId($userId);
+        $boundaryShift->setShiftDate($boundaryDate);
+        $boundaryShift->setClockIn($boundaryDate . ' 08:00:00');
+        $boundaryShift->setClockOut($boundaryDate . ' 08:01:0' . ($index + 1));
+        $boundaryShift->setDurationMinutes(1);
+        $boundaryShift->setDurationSeconds(61 + $index);
+        $boundaryShift->setRoundedSeconds(61 + $index);
+        $boundaryShift->setRoundingInterval(0);
+        $boundaryShift->setTimeZone('UTC');
+        $boundaryShift->setStatus('closed');
+        $testShifts[] = $shiftMapper->insert($boundaryShift);
+    }
 
     $weekly = $storage->generatePayroll('weekly', '2026-11-05');
     $weeklyEmployeeFiles = [
@@ -240,6 +316,35 @@ try {
         'Bi-weekly exports remain unavailable until their pay-period anchor is configured');
     rejects(fn () => $storage->generatePayroll('weekly', '2026-02-30'), 400,
         'Payroll generation rejects invalid dates');
+    foreach ([
+        ['7', '2026-11-05', '2026-11-01', '2026-11-07'],
+        ['7', '2026-11-07', '2026-11-01', '2026-11-07'],
+        ['7', '2026-11-08', '2026-11-08', '2026-11-14'],
+        ['3', '2026-01-01', '2025-12-31', '2026-01-06'],
+        ['4', '2026-03-01', '2026-02-26', '2026-03-04'],
+    ] as [$firstDay, $date, $expectedStart, $expectedEnd]) {
+        $storage->saveRoots($userId, $baseName . '/Payroll', $baseName . '/Sales Order',
+            payrollWeekStart: $firstDay);
+        $period = $storage->generatePayroll('weekly', $date);
+        check($period['start'] === $expectedStart && $period['end'] === $expectedEnd,
+            'Configured weekly boundaries include both endpoints and cross months/years: ' . $date);
+    }
+    rejects(fn () => $storage->saveRoots($userId, $baseName . '/Payroll', $baseName . '/Sales Order',
+        payrollWeekStart: '0'), 400, 'Invalid first weekday is rejected without changing settings');
+    check($storage->settings()['payrollWeekStart'] === '4', 'Rejected weekday leaves the saved workweek intact');
+    $storage->saveRoots($userId, $baseName . '/Payroll', $baseName . '/Sales Order');
+    check($storage->settings()['payrollWeekStart'] === '4', 'Omitted weekday preserves the previously saved workweek');
+    $storage->saveRoots($userId, $baseName . '/Payroll', $baseName . '/Sales Order', payrollWeekStart: '7');
+    $sunday = $storage->generatePayroll('weekly', '2026-11-05');
+    $sundayXml = workbookSheet($rootFolder->getUserFolder($userId)->get(
+        $baseName . '/Payroll/' . rawurlencode($userId) . '/timesheet-weekly-2026-11-01-2026-11-07.xlsx'
+    )->getContent());
+    check(str_contains($sundayXml, '2026-11-01 08:00:00')
+        && str_contains($sundayXml, '2026-11-07 08:00:00')
+        && !str_contains($sundayXml, '2026-11-08') && $sunday['count'] >= 2,
+        'Configured payroll includes first/last-day shifts and excludes the next payroll week');
+    check($storage->generatePayroll('monthly', '2026-11-05')['start'] === '2026-11-01',
+        'Monthly payroll remains independent of the weekly start setting');
 
     $job = new Job();
     $job->setUserId($userId);
@@ -273,8 +378,8 @@ try {
     $openJob->setTimeZone('UTC');
     $testJobs[] = $jobMapper->insert($openJob);
 
-    $jobReport = $storage->generateJobReport('SO260001');
-    check($jobReport['count'] === 1
+    $jobReport = $storage->synchronizeJob('SO260001');
+    check($jobReport['count'] === 2
         && $jobReport['folder'] === '2026/1-99/SO260001 - Customer/Time logs/Time logs.xlsx',
         'Job report resolves the configured year and first-group path and matches the Job ID folder prefix');
     $jobFile = $rootFolder->getUserFolder($userId)->get(
@@ -285,23 +390,23 @@ try {
         && str_contains($jobXml, '0:30:00')
         && str_contains($jobXml, '0:45:00')
         && !str_contains($jobXml, 'SO260002'),
-        'Job workbook includes completed exact-ID intervals and reported durations only');
+        'Job workbook includes exact-ID closed and active intervals without finalizing open durations');
     $yearFolder->newFolder('100-199')->newFolder('SO260100 - Another Customer');
-    check($storage->generateJobReport('SO260100')['folder']
+    check($storage->synchronizeJob('SO260100')['folder']
         === '2026/100-199/SO260100 - Another Customer/Time logs/Time logs.xlsx',
         'Sequence 100 starts the next 100-number grouping folder');
     $yearFolder->get('1-99')->newFolder('SO260099 - Last first-group Job');
-    check($storage->generateJobReport('SO260099')['folder']
+    check($storage->synchronizeJob('SO260099')['folder']
         === '2026/1-99/SO260099 - Last first-group Job/Time logs/Time logs.xlsx',
         'Sequence 99 remains in the first grouping folder');
     $firstGroup->newFolder('SO260001 Secondary');
-    rejects(fn () => $storage->generateJobReport('SO260001'), 409,
+    rejects(fn () => $storage->synchronizeJob('SO260001'), 409,
         'Ambiguous Job ID folder prefix matches are rejected');
-    rejects(fn () => $storage->generateJobReport('SO260003'), 404,
+    rejects(fn () => $storage->synchronizeJob('SO260003'), 404,
         'Missing Job folders are explicitly rejected');
-    rejects(fn () => $storage->generateJobReport('NOT-A-JOB'), 400,
+    rejects(fn () => $storage->synchronizeJob('NOT-A-JOB'), 400,
         'Job IDs that do not match the configured format are rejected');
-    rejects(fn () => $storage->generateJobReport('SO260000'), 400,
+    rejects(fn () => $storage->synchronizeJob('SO260000'), 400,
         'Zero is rejected as a Job sequence number');
 
     $customGroup = $jobRoot->newFolder('Jobs')->newFolder('1926')->newFolder('batch-10-to-19');
@@ -317,12 +422,103 @@ try {
         '10',
         'batch-{start}-to-{end}',
     );
-    check($storage->generateJobReport('AB260012')['folder']
+    check($storage->synchronizeJob('AB260012')['folder']
         === 'Jobs/1926/batch-10-to-19/AB260012 - Customer/Time logs/Time logs.xlsx',
         'Custom Job ID, folder path, century, and grouping formats support other business structures');
+    $jobMapper->delete($openJob);
+    array_pop($testJobs);
+    $config->setAppValue('timesheets', 'job_tracking', '1');
+    $config->setAppValue('timesheets', 'shift_tracking', '0');
+    $config->setAppValue('timesheets', 'job_require_shift', '0');
+    $config->setAppValue('timesheets', 'access_policy', '{"restricted":false,"grants":[]}');
+    $storage->saveRoots($userId, $baseName . '/Payroll', $baseName . '/Sales Order');
+    $clock = Server::get(JobClockService::class);
+    rejects(fn () => $clock->clockIn($userId, 'SO260003'), 404,
+        'Missing folder prevents Job clock-in');
+    check($jobMapper->findOpenForUser($userId) === null, 'Failed clock-in leaves no active database interval');
+    $automaticFolder = $yearFolder->newFolder('200-299')->newFolder('SO260200 - Automatic');
+    $first = $clock->clockIn($userId, 'SO260200');
+    $testJobs[] = $first;
+    $automaticFile = $automaticFolder->get('Time logs/Time logs.xlsx');
+    $activeXml = workbookSheet($automaticFile->getContent());
+    check(str_contains($activeXml, 'Active') && str_contains($activeXml, 'Interval ID')
+        && str_contains($activeXml, $userId) && !str_contains($activeXml, '>Closed<'),
+        'First clock-in creates a workbook with an interval ID and active start row');
+    $second = $clock->clockIn($otherUserId, 'SO260200');
+    $testJobs[] = $second;
+    $bothXml = workbookSheet($automaticFile->getContent());
+    check(substr_count($bothXml, '>Active<') === 2
+        && str_contains($bothXml, $userId) && str_contains($bothXml, $otherUserId),
+        'Second employee clock-in preserves both active rows in the same workbook');
+    check($clock->clockOut($otherUserId, $second->getId()) === null, 'Second employee clock-out updates the workbook');
+    $document = new DOMDocument();
+    $document->loadXML(workbookSheet($automaticFile->getContent()), LIBXML_NONET);
+    $xpath = new DOMXPath($document);
+    $xpath->registerNamespace('s', 'http://schemas.openxmlformats.org/spreadsheetml/2006/main');
+    foreach ([[$first, 'Active'], [$second, 'Closed']] as [$interval, $status]) {
+        $row = $xpath->query('//s:row[s:c[1]/s:is/s:t="' . $interval->getId() . '"]');
+        check($row->length === 1 && $xpath->query('s:c[11]/s:is/s:t', $row->item(0))->item(0)->textContent === $status,
+            'Workbook row is identified by its immutable interval ID, not employee order: ' . $status);
+    }
+    $automaticFile->delete();
+    $blockedTarget = $automaticFolder->get('Time logs')->newFolder('Time logs.xlsx');
+    $warning = $clock->clockOut($userId, $first->getId());
+    check($warning !== null && str_contains($warning, 'your time is saved')
+        && $jobMapper->findOpenForUser($userId) === null,
+        'Workbook failure reports a warning but commits clock-out');
+    rejects(fn () => $clock->clockIn($userId, 'SO260200'), 400,
+        'Unwritable workbook target prevents a new clock-in');
+    check($jobMapper->findOpenForUser($userId) === null, 'Workbook write failure rolls back the new interval');
+    $blockedTarget->delete();
+    $retry = $clock->clockIn($userId, 'SO260200');
+    $testJobs[] = $retry;
+    $repaired = workbookSheet($automaticFolder->get('Time logs/Time logs.xlsx')->getContent());
+    check(substr_count($repaired, '>Closed<') === 2 && substr_count($repaired, '>Active<') === 1,
+        'Next successful clock-in rebuilds previously unsynchronized closed rows without duplicates');
+    $clock->clockOut($userId, $retry->getId());
+    $raceIds = concurrentClocks($nextcloudRoot, [[$userId, 'in', 0], [$otherUserId, 'in', 0]]);
+    $raceXml = workbookSheet($automaticFolder->get('Time logs/Time logs.xlsx')->getContent());
+    check(substr_count($raceXml, '>Active<') === 2 && substr_count($raceXml, '>Closed<') === 3,
+        'Concurrent first/second employee starts preserve every workbook interval');
+    concurrentClocks($nextcloudRoot, [[$otherUserId, 'out', $raceIds[1]], [$userId, 'out', $raceIds[0]]]);
+    $raceClosedXml = workbookSheet($automaticFolder->get('Time logs/Time logs.xlsx')->getContent());
+    check(!str_contains($raceClosedXml, '>Active<') && substr_count($raceClosedXml, '>Closed<') === 5,
+        'Concurrent clock-outs close only their own rows without lost updates or duplicate rows');
+    $writeFailure = new class extends \OCA\Timesheets\Service\WorkbookWriter {
+        public function write(array $rows): string {
+            throw new \OCP\Files\GenericFileException('Simulated workbook storage outage.');
+        }
+    };
+    $logger = Server::get(\Psr\Log\LoggerInterface::class);
+    $shiftClock = Server::get(\OCA\Timesheets\Service\ShiftClockService::class);
+    $failingStorage = new StorageService($config, $rootFolder, $users, $shiftMapper, $jobMapper,
+        $shiftClock, $writeFailure, $logger);
+    $failingClock = new JobClockService($jobMapper, $shiftMapper, $shiftClock,
+        Server::get(\OCA\Timesheets\Service\AccessService::class), $config,
+        Server::get(\OCP\AppFramework\Utility\ITimeFactory::class),
+        Server::get(\OCA\Timesheets\Service\ClockTransaction::class),
+        Server::get(\OCA\Timesheets\Service\RoundingService::class), $failingStorage, $logger);
+    rejects(fn () => $failingClock->clockIn($otherUserId, 'SO260200'), 409,
+        'Workbook I/O exceptions prevent clock-in with an explicit administrator error');
+    check($jobMapper->findOpenForUser($otherUserId) === null, 'I/O failure does not persist an active interval');
+    $beforeOutage = $clock->clockIn($userId, 'SO260200');
+    $warning = $failingClock->clockOut($userId, $beforeOutage->getId());
+    check($warning !== null && $jobMapper->findOpenForUser($userId) === null,
+        'Actual workbook I/O exception is logged and warned without blocking clock-out');
+    $recover = $clock->clockIn($otherUserId, 'SO260200');
+    check(substr_count(workbookSheet($automaticFolder->get('Time logs/Time logs.xlsx')->getContent()), '>Closed<') === 6,
+        'Successful synchronization repairs the row left stale by an I/O outage');
+    $clock->clockOut($otherUserId, $recover->getId());
 } finally {
-    foreach ($testJobs as $entry) {
-        $jobMapper->delete($entry);
+    foreach ([$userId, $otherUserId] as $accountId) {
+        foreach ($jobMapper->findByUser($accountId) as $entry) {
+            $jobMapper->delete($entry);
+        }
+    }
+    foreach ([$userId, $otherUserId, 'job:' . hash('sha256', 'SO260003'), 'job:' . hash('sha256', 'SO260200')] as $lockId) {
+        $query = Server::get(\OCP\IDBConnection::class)->getQueryBuilder();
+        $query->delete('timesheets_clock_locks')->where($query->expr()->eq('user_id', $query->createNamedParameter($lockId)));
+        $query->executeStatement();
     }
     foreach ($testShifts as $entry) {
         $shiftMapper->delete($entry);

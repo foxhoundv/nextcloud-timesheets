@@ -92,7 +92,7 @@ $entries = $_['entries'];
             </form>
             <noscript><p><?php p($l->t('Enable JavaScript to start and end jobs.')); ?></p></noscript>
         <?php endif; ?>
-        <p id="timesheets-job-help" class="timesheets-clock-help"><?php p($l->t('One job can be active at a time. Job intervals are recorded separately from shifts; do not add job time to shift time as extra work.')); ?></p>
+        <p id="timesheets-job-help" class="timesheets-clock-help"><?php p($l->t('One job can be active at a time. The Job folder must already exist; contact your administrator if it is missing. Starting and ending a Job automatically updates its shared workbook. Job intervals are recorded separately from shifts; do not add job time to shift time as extra work.')); ?></p>
     </section>
 
     <section aria-labelledby="timesheets-overview">

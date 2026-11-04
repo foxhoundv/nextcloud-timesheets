@@ -77,6 +77,8 @@ $settingsSaved = false;
 $previousAccess = $config->getAppValue('timesheets', 'access_policy', '');
 $accessSaved = false;
 $accessGroup = null;
+$storageFixture = null;
+require_once __DIR__ . '/JobStorageFixture.php';
 
 function request(string $path, ?array $payload = null, ?string $token = null): array {
     global $baseUrl, $cookieFile;
@@ -165,6 +167,7 @@ $testShifts = [];
 try {
     $user = $userManager->createUser($userId, $password);
     check($user !== false, 'Temporary regular account was created');
+    $storageFixture = new JobStorageFixture($userId, ['SO0001']);
     check(!$groupManager->isAdmin($userId), 'Test account is not an administrator');
     $anonymous = request('/index.php/apps/timesheets/');
     check(in_array($anonymous['status'], [302, 303], true)
@@ -268,10 +271,6 @@ try {
     check($storageDenied['status'] === 403,
         'Regular accounts cannot configure Timesheets storage (HTTP ' . $storageDenied['status'] . ': '
             . substr($storageDenied['body'], 0, 300) . ')');
-    $jobReportDenied = request('/index.php/apps/timesheets/reports/job', ['reference' => 'SO260001'], $token);
-    check($jobReportDenied['status'] === 403,
-        'Regular accounts cannot generate Job workbooks (HTTP ' . $jobReportDenied['status'] . ': '
-            . substr($jobReportDenied['body'], 0, 300) . ')');
 
     $settingsSaved = true;
     setTrackingOverHttp(true, $token);
@@ -330,18 +329,29 @@ try {
         'Administrator can open Timesheets administration settings (HTTP ' . $admin['status'] . ')');
     check(str_contains($admin['body'], 'timesheets-storage-form')
         && str_contains($admin['body'], 'timesheets-payroll-report-form')
-        && str_contains($admin['body'], 'timesheets-job-report-form')
+        && !str_contains($admin['body'], 'timesheets-job-report-form')
         && substr_count($admin['body'], 'data-folder-picker=') === 2
         && str_contains($admin['body'], 'Job ID format')
         && str_contains($admin['body'], 'Century for two-digit years')
-        && str_contains($admin['body'], 'SO{year:2}{sequence:4}')
-        && str_contains($admin['body'], '{year}/{group}/{jobId}'),
+        && str_contains($admin['body'], 'SO{sequence:4}')
+        && str_contains($admin['body'], 'name="payrollWeekStart"'),
         'Administration includes shared storage configuration and on-demand workbook forms');
     check(request('/index.php/apps/timesheets/settings/storage', [
         'payrollRoot' => '../invalid',
         'jobRoot' => '../invalid',
     ], $token)['status'] === 400,
         'Storage root save rejects unsafe relative paths without changing settings');
+    $storagePayload = Server::get(\OCA\Timesheets\Service\StorageService::class)->settings();
+    unset($storagePayload['owner']);
+    $storagePayload['payrollWeekStart'] = '7';
+    check(request('/index.php/apps/timesheets/settings/storage', $storagePayload)['status'] === 412,
+        'Payroll workweek configuration requires CSRF protection');
+    check(request('/index.php/apps/timesheets/settings/storage', $storagePayload, $token)['status'] === 200,
+        'Administrator can save a Sunday-through-Saturday payroll week over HTTP');
+    $weekPage = request('/index.php/settings/admin/timesheets');
+    $weekPath = new DOMXPath(pageDocument($weekPage['body']));
+    check($weekPath->query('//select[@id="payroll_week_start"]/option[@selected and @value="7"]')->length === 1,
+        'Reloaded settings retain the saved workweek and show its corresponding end weekday');
     check(str_contains($admin['body'], 'timesheets/js/admin.js'), 'Settings page loads the external save script');
     check(str_contains($admin['body'], 'role="tablist"') && str_contains($admin['body'], 'timesheets-tab-group')
         && str_contains($admin['body'], 'timesheets-tab-user') && str_contains($admin['body'], 'Groups/Users With Access'),
@@ -434,11 +444,15 @@ try {
         'Omitted rounding switches preserve independently saved enable states');
     $jobInPath = '/index.php/apps/timesheets/api/v1/jobs/clock-in';
     $jobOutPath = '/index.php/apps/timesheets/api/v1/jobs/clock-out';
+    $jobMapper = Server::get(\OCA\Timesheets\Db\JobMapper::class);
     $adminGroup->removeUser($user);
     check(request($jobInPath, ['reference' => 'SO-HTTP'])['status'] === 412, 'Job clock-in requires CSRF protection');
-    check(request($jobInPath, ['reference' => 'SO-HTTP <test>', 'userId' => 'someone-else',
+    $missingJob = request($jobInPath, ['reference' => 'SO0002'], $token);
+    check($missingJob['status'] === 404 && str_contains($missingJob['body'], 'Contact your administrator')
+        && $jobMapper->findOpenForUser($userId) === null,
+        'Missing Job folder blocks HTTP clock-in with an administrator prompt');
+    check(request($jobInPath, ['reference' => 'SO0001', 'userId' => 'someone-else',
         'clockIn' => '2000-01-01'], $token)['status'] === 200, 'Regular user can start an independent job');
-    $jobMapper = Server::get(\OCA\Timesheets\Db\JobMapper::class);
     $httpJob = $jobMapper->findOpenForUser($userId);
     check($httpJob !== null && $httpJob->getUserId() === $userId
         && str_starts_with($httpJob->getClockIn(), gmdate('Y-m-d')),
@@ -446,13 +460,22 @@ try {
     check(request($jobInPath, ['reference' => 'SO-duplicate'], $token)['status'] === 409,
         'HTTP rejects duplicate active jobs');
     $jobPage = request('/index.php/apps/timesheets/');
-    check($jobPage['status'] === 200 && str_contains($jobPage['body'], 'SO-HTTP &lt;test&gt;')
-        && str_contains($jobPage['body'], '>End job</button>'), 'Dashboard escapes job references and shows active job controls');
+    check($jobPage['status'] === 200 && str_contains($jobPage['body'], 'SO0001')
+        && str_contains($jobPage['body'], '>End job</button>'), 'Dashboard shows the configured Job ID and active job controls');
     check(request($jobOutPath, ['jobId' => $httpJob->getId()])['status'] === 412, 'Job clock-out requires CSRF protection');
     check(request($jobOutPath, ['jobId' => $httpJob->getId() + 1], $token)['status'] === 409,
         'HTTP rejects stale job interval IDs');
-    check(request($jobOutPath, ['jobId' => $httpJob->getId()], $token)['status'] === 200,
-        'Regular user can end the specific active job');
+    $jobRoot = Server::get(\OCA\Timesheets\Service\StorageService::class)->settings()['jobRoot'];
+    $logs = Server::get(\OCP\Files\IRootFolder::class)->getUserFolder($userId)->get($jobRoot . '/SO0001 - Test/Time logs');
+    check($logs->nodeExists('Time logs.xlsx'), 'HTTP clock-in automatically creates the Job workbook');
+    $logs->get('Time logs.xlsx')->delete();
+    $logs->newFolder('Time logs.xlsx');
+    $clockOutResponse = request($jobOutPath, ['jobId' => $httpJob->getId()], $token);
+    $clockOutData = json_decode($clockOutResponse['body'], true, 512, JSON_THROW_ON_ERROR);
+    check($clockOutResponse['status'] === 200 && $clockOutData['status'] === 'ok'
+        && str_contains($clockOutData['warning'] ?? '', 'your time is saved')
+        && $jobMapper->findOpenForUser($userId) === null,
+        'HTTP clock-out saves the specific interval and returns a storage warning instead of trapping the timer');
     check(request($jobOutPath, ['jobId' => $httpJob->getId()], $token)['status'] === 409,
         'HTTP rejects repeated job clock-out');
     $adminGroup->addUser($user);
@@ -547,6 +570,9 @@ try {
     check(request('/index.php/apps/timesheets/admin')['status'] === 200,
         'Nextcloud administrators retain access to the app settings page');
 } finally {
+    if ($storageFixture !== null) {
+        $storageFixture->cleanup();
+    }
     foreach (Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($userId) as $entry) {
         Server::get(\OCA\Timesheets\Db\JobMapper::class)->delete($entry);
     }

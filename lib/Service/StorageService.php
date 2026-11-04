@@ -16,6 +16,7 @@ use OCP\Files\IRootFolder;
 use OCP\Files\NotFoundException;
 use OCP\IConfig;
 use OCP\IUserManager;
+use Psr\Log\LoggerInterface;
 
 class StorageService {
     public function __construct(
@@ -26,6 +27,7 @@ class StorageService {
         private JobMapper $jobs,
         private ShiftClockService $clock,
         private WorkbookWriter $workbooks,
+        private LoggerInterface $logger,
     ) {
     }
 
@@ -40,6 +42,7 @@ class StorageService {
             'jobGroupFirstEnd' => $this->config->getAppValue('timesheets', 'job_group_first_end', '99'),
             'jobGroupSize' => $this->config->getAppValue('timesheets', 'job_group_size', '100'),
             'jobGroupNameFormat' => $this->config->getAppValue('timesheets', 'job_group_name_format', '{start}-{end}'),
+            'payrollWeekStart' => $this->config->getAppValue('timesheets', 'payroll_week_start', '1'),
         ];
     }
 
@@ -53,6 +56,7 @@ class StorageService {
         string $jobGroupFirstEnd = '99',
         string $jobGroupSize = '100',
         string $jobGroupNameFormat = '{start}-{end}',
+        ?string $payrollWeekStart = null,
     ): void {
         $owner = $this->users->get($ownerId);
         if ($owner === null || !$owner->isEnabled()) {
@@ -68,10 +72,15 @@ class StorageService {
             $jobGroupSize,
             $jobGroupNameFormat,
         );
+        $payrollWeekStart ??= $this->settings()['payrollWeekStart'];
+        if (!in_array($payrollWeekStart, ['1', '2', '3', '4', '5', '6', '7'], true)) {
+            throw new \DomainException('Choose a valid first day of the payroll workweek.', 400);
+        }
 
         $this->config->setAppValue('timesheets', 'storage_owner', $ownerId);
         $this->config->setAppValue('timesheets', 'payroll_storage_root', $payrollRoot);
         $this->config->setAppValue('timesheets', 'sales_order_storage_root', $jobRoot);
+        $this->config->setAppValue('timesheets', 'payroll_week_start', $payrollWeekStart);
         foreach ($jobConfiguration as $key => $value) {
             $this->config->setAppValue('timesheets', $key, $value);
         }
@@ -125,7 +134,24 @@ class StorageService {
         return ['start' => $start, 'end' => $end, 'count' => count($files), 'files' => $files];
     }
 
-    public function generateJobReport(string $reference): array {
+    public function synchronizeJob(string $reference): array {
+        try {
+            return $this->writeJobWorkbook($reference);
+        } catch (\OCP\Files\GenericFileException | \OCP\Files\NotPermittedException
+            | \OCP\Files\NotFoundException | \OCP\Files\AlreadyExistsException
+            | \OCP\Files\InvalidPathException | \OCP\Files\NotEnoughSpaceException
+            | \OCP\Files\StorageNotAvailableException | \OCP\Files\StorageInvalidException
+            | \OCP\Files\ConnectionLostException | \OCP\Files\ForbiddenException
+            | \OCP\Files\InvalidContentException | \OCP\Files\EntityTooLargeException
+            | \OCP\Files\LockNotAcquiredException | \OCP\Lock\LockedException $error) {
+            $this->logger->error('Unable to synchronize the Timesheets Job workbook.', [
+                'app' => 'timesheets', 'reference' => $reference, 'exception' => $error,
+            ]);
+            throw new \DomainException('The Job workbook could not be updated. Contact your administrator before starting this Job.', 409, $error);
+        }
+    }
+
+    private function writeJobWorkbook(string $reference): array {
         $reference = trim($reference);
         if ($reference === '' || !mb_check_encoding($reference, 'UTF-8')
             || mb_strlen($reference) > 255 || preg_match('/[\x00-\x1f\x7f]/u', $reference)) {
@@ -141,7 +167,7 @@ class StorageService {
         try {
             $parent = $parentPath === '' ? $root : $root->get($parentPath);
         } catch (NotFoundException $error) {
-            throw new \DomainException('The Job folder path was not found: ' . $parentPath, 404, $error);
+            throw new \DomainException('The Job folder does not exist. Contact your administrator before starting this Job.', 404, $error);
         }
         if (!$parent instanceof Folder) {
             throw new \DomainException('The configured Job folder path is not a folder.', 400);
@@ -155,10 +181,10 @@ class StorageService {
             }
         }
         if ($matches === []) {
-            throw new \DomainException('No Job folder starts with that ID in the configured path.', 404);
+            throw new \DomainException('The Job folder does not exist. Contact your administrator before starting this Job.', 404);
         }
         if (count($matches) !== 1) {
-            throw new \DomainException('More than one Job folder starts with that ID. Make the folder structure more specific.', 409);
+            throw new \DomainException('More than one Job folder starts with that ID. Contact your administrator to resolve the folder structure.', 409);
         }
 
         $jobFolder = $matches[0];
@@ -169,43 +195,46 @@ class StorageService {
             throw new \DomainException('The Job Time logs path exists but is not a folder.', 400);
         }
 
-        $jobs = $this->jobs->findCompletedByReference($reference);
+        $jobs = $this->jobs->findByReference($reference);
         $actualTotal = 0;
         $reportedTotal = 0;
         $rows = [
             ['Job time log', $reference],
             ['Folder', $jobFolder->getName()],
             [],
-            ['Employee', 'Account', 'Job reference', 'Job date', 'Clock in', 'Clock out', 'Actual duration', 'Reported duration', 'Rounding interval (minutes)'],
+            ['Interval ID', 'Employee', 'Account', 'Job ID', 'Job date', 'Clock in', 'Clock out', 'Actual duration', 'Reported duration', 'Rounding interval (minutes)', 'Status'],
         ];
         foreach ($jobs as $job) {
             $actual = $job->getDurationSeconds();
-            if ($actual === null) {
+            $closed = $job->getClockOut() !== null;
+            if ($closed && $actual === null) {
                 $actual = $this->clock->parseTimestamp($job->getClockOut())->getTimestamp()
                     - $this->clock->parseTimestamp($job->getClockIn())->getTimestamp();
             }
-            if ($actual < 0) {
+            if ($actual !== null && $actual < 0) {
                 throw new \RuntimeException('A saved job has a negative duration and cannot be exported.');
             }
-            $reported = $job->getRoundedSeconds() ?? $actual;
-            $actualTotal += $actual;
-            $reportedTotal += $reported;
+            $reported = $closed ? ($job->getRoundedSeconds() ?? $actual) : null;
+            $actualTotal += $closed ? $actual : 0;
+            $reportedTotal += $reported ?? 0;
             $user = $this->users->get($job->getUserId());
             $zone = $this->clock->userTimeZone($job->getUserId());
             $rows[] = [
+                $job->getId(),
                 $user?->getDisplayName() ?? $job->getUserId(),
                 $job->getUserId(),
                 $job->getJobReference(),
                 $job->getJobDate(),
                 $this->clock->parseTimestamp($job->getClockIn())->setTimezone($zone)->format('Y-m-d H:i:s T'),
-                $this->clock->parseTimestamp($job->getClockOut())->setTimezone($zone)->format('Y-m-d H:i:s T'),
-                $this->duration($actual),
-                $this->duration($reported),
-                $job->getRoundingInterval() ?? 'Not captured',
+                $closed ? $this->clock->parseTimestamp($job->getClockOut())->setTimezone($zone)->format('Y-m-d H:i:s T') : '',
+                $closed ? $this->duration($actual) : '',
+                $closed ? $this->duration($reported) : '',
+                $closed ? ($job->getRoundingInterval() ?? 'Not captured') : '',
+                $closed ? 'Closed' : 'Active',
             ];
         }
         $rows[] = [];
-        $rows[] = ['Total', '', '', '', '', '', $this->duration($actualTotal), $this->duration($reportedTotal), ''];
+        $rows[] = ['Total (completed intervals)', '', '', '', '', '', '', $this->duration($actualTotal), $this->duration($reportedTotal), '', ''];
         $fileName = 'Time logs.xlsx';
         $this->writeFile($logFolder, $fileName, $this->workbooks->write($rows));
         $actualFolderPath = $parentPath === ''
@@ -448,8 +477,12 @@ class StorageService {
             throw new \DomainException('Choose a valid date for the report period.', 400);
         }
         if ($period === 'weekly') {
-            $daysFromMonday = (int) $selectedDate->format('N') - 1;
-            $start = $selectedDate->modify('-' . $daysFromMonday . ' days');
+            $weekStart = $this->settings()['payrollWeekStart'];
+            if (!in_array($weekStart, ['1', '2', '3', '4', '5', '6', '7'], true)) {
+                throw new \DomainException('The payroll workweek setting is invalid. Contact your administrator.', 400);
+            }
+            $daysFromStart = ((int) $selectedDate->format('N') - (int) $weekStart + 7) % 7;
+            $start = $selectedDate->modify('-' . $daysFromStart . ' days');
             return [$start->format('Y-m-d'), $start->modify('+6 days')->format('Y-m-d')];
         }
         if ($period === 'monthly') {

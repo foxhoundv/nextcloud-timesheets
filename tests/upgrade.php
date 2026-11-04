@@ -97,6 +97,7 @@ $preferences = [
     'job_group_first_end' => '9',
     'job_group_size' => '10',
     'job_group_name_format' => 'batch-{start}-to-{end}',
+    'payroll_week_start' => '7',
 ];
 
 if ($phase === 'prepare') {
@@ -153,9 +154,14 @@ if ($phase === 'prepare') {
     $mapper->insert($history);
     $clock->clockIn($state['userId']);
     $jobClock = Server::get(\OCA\Timesheets\Service\JobClockService::class);
-    $jobClock->clockIn($state['userId'], 'upgrade-history');
+    $files = Server::get(\OCP\Files\IRootFolder::class)->getUserFolder($state['userId']);
+    $files->newFolder('payroll-share')->newFolder('timesheets');
+    $jobsFolder = $files->newFolder('sales-orders')->newFolder('Jobs')->newFolder('2026')->newFolder('batch-1-to-9');
+    $jobsFolder->newFolder('AB-2026-00001 - History');
+    $jobsFolder->newFolder('AB-2026-00002 - Active');
+    $jobClock->clockIn($state['userId'], 'AB-2026-00001');
     $jobClock->clockOut($state['userId'], $jobClock->current($state['userId'])['id']);
-    $jobClock->clockIn($state['userId'], 'upgrade-active');
+    $jobClock->clockIn($state['userId'], 'AB-2026-00002');
     $state['jobs'] = array_map('jobSnapshot', Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($state['userId']));
     $state['activeJob'] = $jobClock->current($state['userId']);
     $config->setAppValue('timesheets', 'job_require_shift', '1');
@@ -269,6 +275,7 @@ check($settings->getForm()->getParams()['storage'] === [
     'jobGroupFirstEnd' => '9',
     'jobGroupSize' => '10',
     'jobGroupNameFormat' => 'batch-{start}-to-{end}',
+    'payrollWeekStart' => '7',
 ], 'Configured storage roots survive upgrade');
 check(array_map('snapshot', $mapper->findByUser($state['userId'])) === $state['shifts'],
     'Historical and active shift fields are unchanged by upgrade');
