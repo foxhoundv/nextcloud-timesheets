@@ -79,7 +79,7 @@ $mapper = new ShiftMapper($db);
 $access = Server::get(\OCA\Timesheets\Service\AccessService::class);
 $clock = new ShiftClockService($mapper, $config, Server::get(ITimeFactory::class), $access,
     Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
-    Server::get(\OCA\Timesheets\Service\RoundingService::class));
+    Server::get(\OCA\Timesheets\Service\RoundingService::class), Server::get(\OCA\Timesheets\Service\LocationService::class));
 $preferences = [
     'shift_tracking' => '1',
     'job_tracking' => '1',
@@ -111,6 +111,8 @@ if ($phase === 'prepare') {
         'previous' => $previous,
         'version' => $config->getAppValue('timesheets', 'installed_version'),
         'previousAccess' => $config->getAppValue('timesheets', 'access_policy', ''),
+        'previousWorkLocations' => in_array('work_locations', $keys, true)
+            ? $config->getAppValue('timesheets', 'work_locations') : null,
         'previousCombined' => [
             'job_require_shift' => $config->getAppValue('timesheets', 'job_require_shift', ''),
             'shift_end_job_policy' => $config->getAppValue('timesheets', 'shift_end_job_policy', ''),
@@ -137,6 +139,12 @@ if ($phase === 'prepare') {
     foreach ($preferences as $key => $value) {
         $config->setAppValue('timesheets', $key, $value);
     }
+    $config->setAppValue('timesheets', 'work_locations', json_encode([
+        'shiftEnabled' => true, 'jobEnabled' => true, 'multipleCountries' => true,
+        'multipleRegions' => true, 'workingCountry' => 'US', 'countries' => ['CA', 'US'],
+        'regions' => ['US' => ['Idaho', 'Oregon'], 'CA' => ['British Columbia']],
+        'defaultRegion' => 'Oregon',
+    ], JSON_THROW_ON_ERROR));
     $state['accessPolicy'] = json_encode(['restricted' => true, 'grants' => [
         ['type' => 'user', 'id' => $state['userId'], 'shift' => true, 'job' => true, 'admin' => true],
     ]], JSON_THROW_ON_ERROR);
@@ -152,7 +160,7 @@ if ($phase === 'prepare') {
     $history->setTimeZone('America/Los_Angeles');
     $history->setStatus('closed');
     $mapper->insert($history);
-    $clock->clockIn($state['userId']);
+    $clock->clockIn($state['userId'], 'US', 'Oregon');
     $jobClock = Server::get(\OCA\Timesheets\Service\JobClockService::class);
     $files = Server::get(\OCP\Files\IRootFolder::class)->getUserFolder($state['userId']);
     $files->newFolder('payroll-share')->newFolder('timesheets');
@@ -164,6 +172,12 @@ if ($phase === 'prepare') {
     $jobClock->clockIn($state['userId'], 'AB-2026-00002');
     $state['jobs'] = array_map('jobSnapshot', Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($state['userId']));
     $state['activeJob'] = $jobClock->current($state['userId']);
+    $state['workLocations'] = $config->getAppValue('timesheets', 'work_locations', '');
+    $state['locationSnapshots'] = [
+        'shifts' => array_map(static fn ($entry): array => [$entry->getId(), $entry->getWorkLocation()], $mapper->findByUser($state['userId'])),
+        'jobs' => array_map(static fn ($entry): array => [$entry->getId(), $entry->getWorkLocation()],
+            Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($state['userId'])),
+    ];
     $config->setAppValue('timesheets', 'job_require_shift', '1');
     $config->setAppValue('timesheets', 'shift_end_job_policy', 'allow');
     $state['combined'] = ['job_require_shift' => '1', 'shift_end_job_policy' => 'allow'];
@@ -214,6 +228,15 @@ if ($phase === 'cleanup') {
         } else {
             $config->setAppValue('timesheets', $key, $value);
         }
+        if (array_key_exists('previousWorkLocations', $state)) {
+            if ($state['previousWorkLocations'] === null) {
+                $config->deleteAppValue('timesheets', 'work_locations');
+            } else {
+                $config->setAppValue('timesheets', 'work_locations', $state['previousWorkLocations']);
+            }
+            check($config->getAppValue('timesheets', 'work_locations', '__absent__') === ($state['previousWorkLocations'] ?? '__absent__'),
+                'Original work-location configuration restored');
+        }
     }
     if (($state['previousAccess'] ?? '') === '') {
         $config->deleteAppValue('timesheets', 'access_policy');
@@ -254,7 +277,7 @@ foreach ($preferences as $key => $value) {
     check($config->getAppValue('timesheets', $key) === $value, 'Non-default setting survives upgrade: ' . $key);
 }
 $settings = new AdminSettings($config, Server::get(IURLGenerator::class), $access,
-    Server::get(\OCA\Timesheets\Service\StorageService::class));
+    Server::get(\OCA\Timesheets\Service\StorageService::class), Server::get(\OCA\Timesheets\Service\LocationService::class));
 check($settings->getForm()->getParams()['settings'] === [
     'shift_tracking' => true,
     'job_tracking' => true,
@@ -283,6 +306,13 @@ foreach ([
     'shifts' => $mapper->findByUser($state['userId']),
     'jobs' => Server::get(\OCA\Timesheets\Db\JobMapper::class)->findByUser($state['userId']),
 ] as $kind => $intervals) {
+    $locations = array_map(static fn ($entry): array => [$entry->getId(), $entry->getWorkLocation()], $intervals);
+    if (isset($state['locationSnapshots'])) {
+        check($locations === $state['locationSnapshots'][$kind], 'Saved work-location snapshots survive upgrade: ' . $kind);
+    } else {
+        check(count(array_filter($locations, static fn (array $row): bool => $row[1] !== null)) === 0,
+            'Pre-location intervals remain unassigned without resetting timestamps: ' . $kind);
+    }
     $snapshots = array_map(static fn ($entry): array => [$entry->getId(), $entry->getRoundingInterval(), $entry->getRoundedSeconds()], $intervals);
     if (isset($state['roundingSnapshots'])) {
         check($snapshots === $state['roundingSnapshots'][$kind], 'Saved rounding snapshots survive upgrade: ' . $kind);
@@ -290,6 +320,10 @@ foreach ([
         check(count(array_filter($snapshots, static fn (array $row): bool => $row[1] !== null || $row[2] !== null)) === 0,
             'Pre-rounding historical and active intervals retain null snapshots: ' . $kind);
     }
+}
+if (isset($state['workLocations'])) {
+    check($config->getAppValue('timesheets', 'work_locations', '') === $state['workLocations'],
+        'Work-location administration settings survive upgrade');
 }
 foreach ($state['roundingSnapshots']['settings'] ?? ['shift_rounding_enabled' => '0', 'job_rounding_enabled' => '0'] as $key => $value) {
     check($config->getAppValue('timesheets', $key, '0') === $value, 'Rounding enable preference preserved without implicit activation: ' . $key);
@@ -308,7 +342,7 @@ $session->setUser($user);
 $page = new PageController('timesheets', Server::get(IRequest::class), new ShiftService($mapper),
     $session, $clock, Server::get(IURLGenerator::class), $access,
     Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
-    Server::get(\OCA\Timesheets\Service\ShopTimeService::class));
+    Server::get(\OCA\Timesheets\Service\ShopTimeService::class), Server::get(\OCA\Timesheets\Service\LocationService::class));
 $params = $page->index()->getParams();
 check($params['activeShift']['id'] === $active['id'] && $params['trackingEnabled'],
     'Dashboard still receives the active clock-out control and elapsed time');

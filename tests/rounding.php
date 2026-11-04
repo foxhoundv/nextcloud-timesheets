@@ -62,9 +62,10 @@ $shifts = new ShiftMapper($db);
 $jobs = new JobMapper($db);
 $access = Server::get(AccessService::class);
 $transaction = new ClockTransaction($db);
-$shiftClock = new ShiftClockService($shifts, $config, $time, $access, $transaction, $jobs, $rounding);
+$locations = Server::get(\OCA\Timesheets\Service\LocationService::class);
+$shiftClock = new ShiftClockService($shifts, $config, $time, $access, $transaction, $jobs, $rounding, $locations);
 $jobClock = new JobClockService($jobs, $shifts, $shiftClock, $access, $config, $time, $transaction, $rounding,
-    Server::get(\OCA\Timesheets\Service\StorageService::class), Server::get(\Psr\Log\LoggerInterface::class));
+    Server::get(\OCA\Timesheets\Service\StorageService::class), Server::get(\Psr\Log\LoggerInterface::class), $locations);
 require_once __DIR__ . '/JobStorageFixture.php';
 $storageFixture = new JobStorageFixture($id, ['SO0001', 'SO0002']);
 $session = Server::get(\OCP\IUserSession::class);

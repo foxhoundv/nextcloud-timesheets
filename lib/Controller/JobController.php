@@ -24,8 +24,8 @@ class JobController extends Controller {
     }
 
     #[NoAdminRequired]
-    public function clockIn(string $reference): JSONResponse {
-        return $this->record($reference, null);
+    public function clockIn(string $reference, ?string $country = null, ?string $region = null): JSONResponse {
+        return $this->record($reference, null, $country, $region);
     }
 
     #[NoAdminRequired]
@@ -33,7 +33,7 @@ class JobController extends Controller {
         return $this->record('', $jobId);
     }
 
-    private function record(string $reference, ?int $jobId): JSONResponse {
+    private function record(string $reference, ?int $jobId, ?string $country = null, ?string $region = null): JSONResponse {
         $user = $this->userSession->getUser();
         if ($user === null) {
             return new JSONResponse(['message' => $this->l->t('Please sign in to record time.')], 401);
@@ -41,7 +41,7 @@ class JobController extends Controller {
         $warning = null;
         try {
             if ($jobId === null) {
-                $this->clock->clockIn($user->getUID(), $reference);
+                $this->clock->clockIn($user->getUID(), $reference, $country, $region);
             } else {
                 $warning = $this->clock->clockOut($user->getUID(), $jobId);
             }

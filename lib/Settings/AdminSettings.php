@@ -6,6 +6,7 @@ namespace OCA\Timesheets\Settings;
 
 use OCA\Timesheets\Service\AccessService;
 use OCA\Timesheets\Service\StorageService;
+use OCA\Timesheets\Service\LocationService;
 use OCP\AppFramework\Http\TemplateResponse;
 use OCP\IConfig;
 use OCP\IURLGenerator;
@@ -17,6 +18,7 @@ class AdminSettings implements ISettings {
         private IURLGenerator $urlGenerator,
         private AccessService $access,
         private StorageService $storage,
+        private LocationService $locations,
     ) {
     }
 
@@ -36,6 +38,10 @@ class AdminSettings implements ISettings {
         return [
             'settings' => $settings,
             'saveUrl' => $this->urlGenerator->linkToRoute('timesheets.admin.save'),
+            'locations' => $this->locations->settings(),
+            'locationCountries' => $this->locations->countries(),
+            'locationStates' => $this->locations->usStates(),
+            'locationSaveUrl' => $this->urlGenerator->linkToRoute('timesheets.location.save'),
             'shiftRoundingEnabled' => $this->config->getAppValue('timesheets', 'shift_rounding_enabled', '0') === '1',
             'jobRoundingEnabled' => $this->config->getAppValue('timesheets', 'job_rounding_enabled', '0') === '1',
             'accessPolicy' => $this->access->policy(),

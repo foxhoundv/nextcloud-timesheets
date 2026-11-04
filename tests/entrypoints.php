@@ -353,6 +353,47 @@ try {
     check($weekPath->query('//select[@id="payroll_week_start"]/option[@selected and @value="7"]')->length === 1,
         'Reloaded settings retain the saved workweek and show its corresponding end weekday');
     check(str_contains($admin['body'], 'timesheets/js/admin.js'), 'Settings page loads the external save script');
+    check(str_contains($admin['body'], 'timesheets-location-settings')
+        && str_contains($admin['body'], 'Do you need to track multiple countries?')
+        && str_contains($admin['body'], 'states / provinces / regions'),
+        'Administration offers optional country and region tracking');
+    $locationPath = '/index.php/apps/timesheets/settings/locations';
+    $locationSettings = [
+        'shiftEnabled' => true, 'jobEnabled' => true, 'multipleCountries' => false,
+        'multipleRegions' => true, 'workingCountry' => 'US', 'countries' => [],
+        'regions' => ['US' => ['Oregon', 'Idaho']], 'defaultRegion' => 'Oregon',
+    ];
+    $locationPayload = ['settings' => json_encode($locationSettings, JSON_THROW_ON_ERROR)];
+    check(request($locationPath, $locationPayload)['status'] === 412, 'Location settings require CSRF protection');
+    check(request($locationPath, $locationPayload, $token)['status'] === 200, 'Administrator can save Oregon and Idaho location settings');
+    $locationAdmin = request('/index.php/settings/admin/timesheets');
+    $locationXPath = new DOMXPath(pageDocument($locationAdmin['body']));
+    check($locationXPath->query('//*[@data-location-setting="shiftEnabled" and @checked]')->length === 1
+        && str_contains($locationAdmin['body'], 'Oregon'),
+        'Location settings survive an administration-page reload');
+    $locationDashboard = request('/index.php/apps/timesheets/');
+    $locationXPath = new DOMXPath(pageDocument($locationDashboard['body']));
+    check($locationXPath->query('//*[@id="timesheets-clock-form"]//*[@data-work-location]')->length === 1
+        && $locationXPath->query('//*[@id="timesheets-job-form"]//*[@data-work-location]')->length === 1,
+        'Enabled shift and Job forms both offer configured location choices');
+    check(request($clockInPath, ['country' => 'US', 'region' => 'Washington'], $token)['status'] === 400,
+        'HTTP clock-in rejects a state not selected by the administrator');
+    check(request($clockInPath, ['country' => 'US', 'region' => 'Oregon'], $token)['status'] === 200,
+        'HTTP shift clock-in captures the selected work state');
+    $locationShift = $shiftMapper->findOpenForUser($userId);
+    $testShifts[] = $locationShift;
+    check($locationShift !== null && \OCA\Timesheets\Service\LocationService::decode($locationShift->getWorkLocation())['region'] === 'Oregon',
+        'HTTP location selection is persisted on the shift');
+    check(request($clockOutPath, ['shiftId' => $locationShift->getId()], $token)['status'] === 200,
+        'A location-tagged shift can be ended normally');
+    $adminGroup->removeUser($user);
+    check(request($locationPath, $locationPayload, $token)['status'] === 403,
+        'Regular users cannot change country and region configuration');
+    $adminGroup->addUser($user);
+    $locationSettings['shiftEnabled'] = false;
+    $locationSettings['jobEnabled'] = false;
+    check(request($locationPath, ['settings' => json_encode($locationSettings, JSON_THROW_ON_ERROR)], $token)['status'] === 200,
+        'Administrator can disable optional location tracking without altering history');
     check(str_contains($admin['body'], 'role="tablist"') && str_contains($admin['body'], 'timesheets-tab-group')
         && str_contains($admin['body'], 'timesheets-tab-user') && str_contains($admin['body'], 'Groups/Users With Access'),
         'Administration renders group/user tabs and the selected access area');
@@ -520,6 +561,8 @@ try {
     ], $token);
     check($delegatedSettings['status'] === 200,
         'Delegated administrator can save Timesheets settings');
+    check(request($locationPath, ['settings' => json_encode($locationSettings, JSON_THROW_ON_ERROR)], $token)['status'] === 200,
+        'Delegated administrator can configure optional work locations');
     check(request($searchPath, null, $token)['status'] === 200,
         'Delegated administrator can search users for tracking assignments');
     $delegatedPolicy['grants'][0]['shift'] = true;

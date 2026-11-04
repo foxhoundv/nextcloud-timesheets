@@ -9,6 +9,7 @@ use OCA\Timesheets\Service\ShiftClockService;
 use OCA\Timesheets\Service\AccessService;
 use OCA\Timesheets\Service\JobClockService;
 use OCA\Timesheets\Service\ShopTimeService;
+use OCA\Timesheets\Service\LocationService;
 use OCA\Timesheets\Db\JobMapper;
 use OCA\Timesheets\Db\Job;
 use OCA\Timesheets\Db\Shift;
@@ -32,6 +33,7 @@ class PageController extends Controller {
         private JobClockService $jobClock,
         private JobMapper $jobs,
         private ShopTimeService $shopTime,
+        private LocationService $locations,
     ) {
         parent::__construct($appName, $request);
     }
@@ -57,6 +59,9 @@ class PageController extends Controller {
 
         return new TemplateResponse('timesheets', 'main', [
             'stats' => $stats,
+            'locationSettings' => $this->locations->settings(),
+            'shiftLocationOptions' => $this->locations->options(),
+            'jobLocationOptions' => $this->locations->options($this->activeShiftLocation($shifts)),
             'entries' => $entries,
             'breakdown' => $breakdown,
             'trackingEnabled' => $this->clock->isEnabled(),
@@ -76,6 +81,15 @@ class PageController extends Controller {
         ]);
     }
 
+    private function activeShiftLocation(array $shifts): ?string {
+        foreach ($shifts as $shift) {
+            if ($shift->getStatus() === 'open') {
+                return $shift->getWorkLocation();
+            }
+        }
+        return null;
+    }
+
     private function jobEntries(array $jobs, string $userId): array {
         $entries = [];
         foreach ($jobs as $job) {
@@ -83,6 +97,7 @@ class PageController extends Controller {
             $zone = $open ? new \DateTimeZone($job->getTimeZone()) : $this->clock->userTimeZone($userId);
             $entries[] = [
                 'reference' => $job->getJobReference(),
+                'location' => LocationService::label($job->getWorkLocation()),
                 'date' => $job->getJobDate(),
                 'clockIn' => $this->clock->parseTimestamp($job->getClockIn())->setTimezone($zone)->format('Y-m-d H:i:s T'),
                 'clockOut' => $open ? null : $this->clock->parseTimestamp($job->getClockOut())->setTimezone($zone)->format('Y-m-d H:i:s T'),
@@ -151,6 +166,7 @@ class PageController extends Controller {
 
             $entries[] = [
                 'date' => (string) ($shift->getShiftDate() ?? '—'),
+                'location' => LocationService::label($shift->getWorkLocation()),
                 'total' => $status === 'open' ? null : $this->formatMinutes($durationMinutes),
                 'reported' => $status === 'open' ? null : $this->formatMinutes(intdiv($this->reportedSeconds($shift,
                     $breakdown['totalSeconds'] ?? $shift->getDurationSeconds() ?? $durationMinutes * 60), 60)),

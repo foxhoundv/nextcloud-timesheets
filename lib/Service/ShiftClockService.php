@@ -22,6 +22,7 @@ class ShiftClockService {
         private ClockTransaction $transaction,
         private JobMapper $jobs,
         private RoundingService $rounding,
+        private LocationService $locations,
     ) {
     }
 
@@ -45,14 +46,15 @@ class ShiftClockService {
             'clockIn' => $clockIn->format(DATE_ATOM),
             'startedAt' => $clockIn->setTimezone($zone)->format('Y-m-d H:i:s T'),
             'elapsedSeconds' => max(0, $this->time->getTime() - $clockIn->getTimestamp()),
+            'location' => LocationService::label($shift->getWorkLocation()),
         ];
     }
 
-    public function clockIn(string $userId): Shift {
-        return $this->transaction->run($userId, fn (): Shift => $this->start($userId));
+    public function clockIn(string $userId, ?string $country = null, ?string $region = null): Shift {
+        return $this->transaction->run($userId, fn (): Shift => $this->start($userId, $country, $region));
     }
 
-    private function start(string $userId): Shift {
+    private function start(string $userId, ?string $country, ?string $region): Shift {
         if (!$this->isEnabled()) {
             throw new \DomainException('Shift tracking is disabled. Ask an administrator to enable it.', 403);
         }
@@ -69,6 +71,7 @@ class ShiftClockService {
         $shift->setClockIn($now->format('Y-m-d H:i:s'));
         $shift->setDurationMinutes(0);
         $shift->setStatus('open');
+        $shift->setWorkLocation($this->locations->capture('shift', $country, $region));
         try {
             return $this->shiftMapper->insert($shift);
         } catch (Exception $error) {

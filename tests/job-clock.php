@@ -71,9 +71,10 @@ $shifts = new ShiftMapper($db);
 $access = Server::get(AccessService::class);
 $transaction = new ClockTransaction($db);
 $rounding = Server::get(\OCA\Timesheets\Service\RoundingService::class);
-$shiftClock = new ShiftClockService($shifts, $config, $time, $access, $transaction, $jobs, $rounding);
+$locations = Server::get(\OCA\Timesheets\Service\LocationService::class);
+$shiftClock = new ShiftClockService($shifts, $config, $time, $access, $transaction, $jobs, $rounding, $locations);
 $jobClock = new JobClockService($jobs, $shifts, $shiftClock, $access, $config, $time, $transaction, $rounding,
-    Server::get(\OCA\Timesheets\Service\StorageService::class), Server::get(\Psr\Log\LoggerInterface::class));
+    Server::get(\OCA\Timesheets\Service\StorageService::class), Server::get(\Psr\Log\LoggerInterface::class), $locations);
 require_once __DIR__ . '/JobStorageFixture.php';
 $storageFixture = new JobStorageFixture($id, ['SO0001', 'SO0002', 'SO0003', 'SO0004', 'SO0005']);
 function rejects(callable $action, int $code, string $message): void {
@@ -106,7 +107,7 @@ try {
     $page = new \OCA\Timesheets\Controller\PageController('timesheets', Server::get(\OCP\IRequest::class),
         new \OCA\Timesheets\Service\ShiftService($shifts), $session, $shiftClock,
         Server::get(\OCP\IURLGenerator::class), $access, $jobClock, $jobs,
-        new \OCA\Timesheets\Service\ShopTimeService($shiftClock));
+        new \OCA\Timesheets\Service\ShopTimeService($shiftClock), $locations);
     $access->save('{"restricted":true,"grants":[]}');
     $params = $page->index()->getParams();
     check($params['entries'] === [] && $params['activeJob']['id'] === $job->getId() && !$params['canStartJob'],

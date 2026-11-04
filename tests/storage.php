@@ -157,6 +157,7 @@ $configKeys = [
     'job_group_size',
     'job_group_name_format',
     'payroll_week_start',
+    'work_locations',
     'job_tracking',
     'shift_tracking',
     'job_require_shift',
@@ -183,6 +184,7 @@ $testShifts = [];
 $testJobs = [];
 
 try {
+    $config->deleteAppValue('timesheets', 'work_locations');
     $baseName = 'timesheets-storage-' . bin2hex(random_bytes(6));
     $baseFolder = $rootFolder->getUserFolder($userId)->newFolder($baseName);
     check($baseFolder instanceof Folder, 'Test storage root created in the account files');
@@ -492,12 +494,13 @@ try {
     $logger = Server::get(\Psr\Log\LoggerInterface::class);
     $shiftClock = Server::get(\OCA\Timesheets\Service\ShiftClockService::class);
     $failingStorage = new StorageService($config, $rootFolder, $users, $shiftMapper, $jobMapper,
-        $shiftClock, $writeFailure, $logger);
+        $shiftClock, $writeFailure, $logger, Server::get(\OCA\Timesheets\Service\PayrollLocationService::class));
     $failingClock = new JobClockService($jobMapper, $shiftMapper, $shiftClock,
         Server::get(\OCA\Timesheets\Service\AccessService::class), $config,
         Server::get(\OCP\AppFramework\Utility\ITimeFactory::class),
         Server::get(\OCA\Timesheets\Service\ClockTransaction::class),
-        Server::get(\OCA\Timesheets\Service\RoundingService::class), $failingStorage, $logger);
+        Server::get(\OCA\Timesheets\Service\RoundingService::class), $failingStorage, $logger,
+        Server::get(\OCA\Timesheets\Service\LocationService::class));
     rejects(fn () => $failingClock->clockIn($otherUserId, 'SO260200'), 409,
         'Workbook I/O exceptions prevent clock-in with an explicit administrator error');
     check($jobMapper->findOpenForUser($otherUserId) === null, 'I/O failure does not persist an active interval');

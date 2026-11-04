@@ -11,7 +11,7 @@ Native Nextcloud app for employee work shifts, Job intervals, shop-time totals, 
 
 ## App versioning
 
-Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `1.3.1` follows this format.
+Use `Major.Minor.Sub-minor` for app releases (`Major.Minor.Sub-minor` maps to the Nextcloud app version in `appinfo/info.xml`). Major is an unbounded nonnegative integer, Minor is 1-9, and Sub-minor is 1-99. The current version `2.1.1` follows this format.
 
 Before changing the app version for an update, ask the project owner whether it is a **Major**, **Minor**, or **Sub-minor** change; do not choose a level or bump the version without that answer. Increment the selected component and reset any lower-order components to 1: a sub-minor update changes only the last component, a minor update resets Sub-minor to 1, and a major update resets Minor and Sub-minor to 1. For example, `0.1.15` to `0.1.16` is Sub-minor, `0.1.99` to `0.2.1` is Minor, and `0.9.99` to `1.1.1` is Major.
 
@@ -128,6 +128,22 @@ On the testing server, run `php apps/timesheets/tests/shift-clock.php /path/to/n
 
 After deploying new routes and running `occ upgrade`, verify the web endpoints as well as CLI checks. If the web process still has an old APCu route list, refresh that testing instance's PHP/web process cache (or restart its container) and verify the login page is HTTP-ready before testing; a successful CLI upgrade alone does not clear a web worker's APCu cache.
 
+### Optional work-location tracking
+
+In **Timesheet Administration > Work locations for payroll**, enable location selection independently for shifts and Jobs. Both are off by default. Choose whether to track multiple countries; **Yes** shows a country checklist, while **No** uses the configured working country for everyone. The working country also supplies the default when multiple countries are enabled.
+
+Enable **multiple states / provinces / regions** to select the subdivisions to offer for each country. US states and territories are supplied as a checklist, including Oregon and Idaho. For other countries, add your organization's province/region names and select them from the checklist. Select a default region in the working country. Countries come from Nextcloud's bundled country catalog; no external location service or employee geolocation is used.
+
+Employees choose only administrator-approved locations at clock-in. Jobs initially inherit the active shift location, with a different choice available only when Job selection is enabled. A mode without selection uses the administrator default, or inherits the active shift for Jobs. A Job ID retains its recorded physical location across employees; conflicting location choices are rejected. To change location, end the Job and/or shift and start another interval, using a different Job ID for a different physical Job location.
+
+Country and region names are saved with each interval. Changing or disabling configuration never relabels historical records, changes an active interval, or prevents clock-out. Existing records receive no invented location; they remain **Not recorded**. Saved locations appear on the dashboard, in history, and in Job workbooks.
+
+Weekly and other payroll workbooks include per-shift location allocations and period totals by country and region. Non-Job shift time uses the shift location; a located Job overrides only its overlap with that employee's shift. Job time outside shifts is not additional payroll time. Missing Job locations retain the shift location, and legacy unlocated time is shown separately. Conflicting overlapping Job locations stop the export with an explicit error rather than guessing.
+
+Actual totals use exact seconds. Saved reported shift seconds are distributed proportionally across locations using largest remainders so every shift and period reconciles exactly; Job rounding is not added or applied again. The existing payroll period attribution to the shift's start date is unchanged. This is location reporting, not tax calculation or automatic legal/payroll classification.
+
+On the testing server, run `php apps/timesheets/tests/locations.php /path/to/nextcloud` for configuration validation, Oregon/Idaho splits, immutable snapshots, inheritance, workbook output, regional rounding reconciliation, and legacy/boundary checks. The HTTP suite covers permissions, CSRF, administration persistence, and employee selectors. Run while testing users are idle; fixtures and original settings are restored afterwards.
+
 ### Shop time in completed shifts
 
 Version 0.1.14 adds **Job time in shift** and **Shop time** to shift history, plus all-date **Job time in shifts** and **Shop time** totals. No additional setting is required. Existing permissions still govern access to your own history, including after tracking is disabled or Timesheets permissions are revoked.
@@ -228,7 +244,7 @@ The existing `.gitignore` rules exclude `.env` from Git. Keep real credentials o
 
 ## Development status
 
-This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time and optional saved rounding, configurable shift/job interaction, completed-shift job/shop breakdowns, post-clock-out long-shift reminders, unpaid breaks as gaps between separate shifts, user/group tracking grants, delegated Timesheets administration, shared storage roots, automatic Job XLSX workbooks, and on-demand payroll reports with configurable weekly boundaries. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. PHP lint and the storage, Job clock, rounding, and HTTP regression suites pass on that server. The 1.3.1 upgrade also verified settings, history, and active shift/Job timer persistence, and removal of the obsolete manual Job-report endpoint. Printable views remain planned.
+This repository contains migration-managed shift/job persistence, clock-in/out with actual elapsed time and optional saved rounding, configurable shift/job interaction, completed-shift job/shop breakdowns, post-clock-out long-shift reminders, unpaid breaks as gaps between separate shifts, user/group tracking grants, delegated Timesheets administration, shared storage roots, automatic Job XLSX workbooks, and on-demand payroll reports with configurable weekly boundaries and country/region allocations. The separate development server is Nextcloud 35.0.2; production compatibility must remain at Nextcloud 34 or newer. PHP lint and the work-location, shift/Job clock, storage, rounding, access, shop-time, and HTTP regression suites pass on that server. The 2.1.1 upgrade verified settings, history, and active shift/Job timer persistence; existing intervals remain unassigned rather than receiving invented locations. Printable views remain planned.
 
 ## Longer-term direction
 

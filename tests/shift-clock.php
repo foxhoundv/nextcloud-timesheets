@@ -34,6 +34,8 @@ $clock = new class implements ITimeFactory {
 };
 $config = Server::get(IConfig::class);
 $previousAccess = $config->getAppValue('timesheets', 'access_policy', '');
+$previousLocations = in_array('work_locations', $config->getAppKeys('timesheets'), true)
+    ? $config->getAppValue('timesheets', 'work_locations') : null;
 $previousTracking = in_array('shift_tracking', $config->getAppKeys('timesheets'), true)
     ? $config->getAppValue('timesheets', 'shift_tracking') : null;
 $previousThreshold = in_array('net_shift_threshold', $config->getAppKeys('timesheets'), true)
@@ -44,7 +46,7 @@ check($user !== false, 'Clock test account created');
 $mapper = new ShiftMapper($db);
 $service = new ShiftClockService($mapper, $config, $clock, Server::get(\OCA\Timesheets\Service\AccessService::class),
     Server::get(\OCA\Timesheets\Service\ClockTransaction::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
-    Server::get(\OCA\Timesheets\Service\RoundingService::class));
+    Server::get(\OCA\Timesheets\Service\RoundingService::class), Server::get(\OCA\Timesheets\Service\LocationService::class));
 $saved = [];
 
 function expectConflict(callable $action, int $code, string $message): void {
@@ -58,6 +60,7 @@ function expectConflict(callable $action, int $code, string $message): void {
 }
 
 try {
+    $config->deleteAppValue('timesheets', 'work_locations');
     $config->setAppValue('timesheets', 'access_policy', '{"restricted":false,"grants":[]}');
     $config->setAppValue('timesheets', 'shift_tracking', '0');
     expectConflict(fn () => $service->clockIn($testUserId), 403, 'Disabled tracking rejects clock-in');
@@ -184,7 +187,7 @@ try {
         new \OCA\Timesheets\Service\ShiftService($mapper), $session, $service,
         Server::get(\OCP\IURLGenerator::class), Server::get(\OCA\Timesheets\Service\AccessService::class),
         Server::get(\OCA\Timesheets\Service\JobClockService::class), Server::get(\OCA\Timesheets\Db\JobMapper::class),
-        Server::get(\OCA\Timesheets\Service\ShopTimeService::class));
+        Server::get(\OCA\Timesheets\Service\ShopTimeService::class), Server::get(\OCA\Timesheets\Service\LocationService::class));
     $params = $page->index()->getParams();
     $totalMinutes = intdiv($previousSeconds + 480 * 60, 60);
     check($params['stats'][0]['value'] === sprintf('%dh %02dm', intdiv($totalMinutes, 60), $totalMinutes % 60),
@@ -215,6 +218,11 @@ try {
         $mapper->delete($entry);
     }
     Server::get(IAppConfig::class)->clearCache();
+    if ($previousLocations === null) {
+        $config->deleteAppValue('timesheets', 'work_locations');
+    } else {
+        $config->setAppValue('timesheets', 'work_locations', $previousLocations);
+    }
     if ($previousAccess === '') {
         $config->deleteAppValue('timesheets', 'access_policy');
     } else {

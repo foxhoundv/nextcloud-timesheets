@@ -28,6 +28,7 @@ class StorageService {
         private ShiftClockService $clock,
         private WorkbookWriter $workbooks,
         private LoggerInterface $logger,
+        private PayrollLocationService $payrollLocations,
     ) {
     }
 
@@ -100,6 +101,9 @@ class StorageService {
             $displayName = $user?->getDisplayName() ?? $userId;
             $actualTotal = 0;
             $reportedTotal = 0;
+            $locationTotals = [];
+            $locationRows = [];
+            $jobs = $this->jobs->findByUser($userId);
             $rows = [
                 ['Employee timesheet', $displayName],
                 ['Account', $userId],
@@ -107,7 +111,7 @@ class StorageService {
                 ['From', $start],
                 ['Through', $end],
                 [],
-                ['Shift date', 'Clock in', 'Clock out', 'Actual duration', 'Reported duration', 'Rounding interval (minutes)'],
+                ['Shift date', 'Clock in', 'Clock out', 'Actual duration', 'Reported duration', 'Rounding interval (minutes)', 'Shift work location'],
             ];
             foreach ($shifts as $shift) {
                 $actual = $this->shiftDuration($shift);
@@ -122,10 +126,32 @@ class StorageService {
                     $this->duration($actual),
                     $this->duration($reported),
                     $shift->getRoundingInterval() ?? 'Not captured',
+                    LocationService::label($shift->getWorkLocation()),
                 ];
+                foreach ($this->payrollLocations->split($shift, $jobs, $actual, $reported) as $key => $part) {
+                    $locationRows[] = [$shift->getShiftDate(), $shift->getId(), $part['country'], $part['region'],
+                        $this->duration($part['actual']), $this->duration($part['reported'])];
+                    if (!isset($locationTotals[$key])) {
+                        $locationTotals[$key] = ['country' => $part['country'], 'region' => $part['region'], 'actual' => 0, 'reported' => 0];
+                    }
+                    $locationTotals[$key]['actual'] += $part['actual'];
+                    $locationTotals[$key]['reported'] += $part['reported'];
+                }
             }
             $rows[] = [];
             $rows[] = ['Total', '', '', $this->duration($actualTotal), $this->duration($reportedTotal), ''];
+            $rows[] = [];
+            $rows[] = ['Work location allocation', 'Job locations override overlapping shift time only'];
+            $rows[] = ['Reported seconds are allocated proportionally from each saved shift total; not rounded again by location.'];
+            $rows[] = ['Shift date', 'Shift ID', 'Country', 'State / province / region', 'Actual duration', 'Reported duration'];
+            array_push($rows, ...$locationRows);
+            $rows[] = [];
+            $rows[] = ['Weekly/period location totals'];
+            $rows[] = ['Country', 'State / province / region', 'Actual duration', 'Reported duration'];
+            uasort($locationTotals, static fn (array $a, array $b): int => [$a['country'], $a['region']] <=> [$b['country'], $b['region']]);
+            foreach ($locationTotals as $part) {
+                $rows[] = [$part['country'], $part['region'], $this->duration($part['actual']), $this->duration($part['reported'])];
+            }
             $userFolder = $root->getOrCreateFolder(rawurlencode($userId));
             $fileName = 'timesheet-' . $period . '-' . $start . '-' . $end . '.xlsx';
             $this->writeFile($userFolder, $fileName, $this->workbooks->write($rows));
@@ -202,7 +228,7 @@ class StorageService {
             ['Job time log', $reference],
             ['Folder', $jobFolder->getName()],
             [],
-            ['Interval ID', 'Employee', 'Account', 'Job ID', 'Job date', 'Clock in', 'Clock out', 'Actual duration', 'Reported duration', 'Rounding interval (minutes)', 'Status'],
+            ['Interval ID', 'Employee', 'Account', 'Job ID', 'Job date', 'Clock in', 'Clock out', 'Actual duration', 'Reported duration', 'Rounding interval (minutes)', 'Status', 'Country', 'State / province / region'],
         ];
         foreach ($jobs as $job) {
             $actual = $job->getDurationSeconds();
@@ -231,6 +257,8 @@ class StorageService {
                 $closed ? $this->duration($reported) : '',
                 $closed ? ($job->getRoundingInterval() ?? 'Not captured') : '',
                 $closed ? 'Closed' : 'Active',
+                $job->getWorkLocation() === null ? 'Not recorded' : LocationService::decode($job->getWorkLocation())['country'],
+                $job->getWorkLocation() === null ? '' : LocationService::decode($job->getWorkLocation())['region'],
             ];
         }
         $rows[] = [];

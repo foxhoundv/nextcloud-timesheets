@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 script('timesheets', 'main');
+script('timesheets', 'locations');
 style('timesheets', 'main');
 
 $stats = $_['stats'];
@@ -30,6 +31,7 @@ $entries = $_['entries'];
     <section class="timesheets-notice" aria-labelledby="timesheets-availability">
         <h2 id="timesheets-availability"><?php p($l->t('Your current shift')); ?></h2>
         <?php if ($_['activeShift'] !== null): ?>
+            <p><?php p($l->t('Work location: %s', [$_['activeShift']['location']])); ?></p>
             <p><?php p($l->t('You are clocked in. Started %s.', [$_['activeShift']['startedAt']])); ?></p>
             <p class="timesheets-elapsed"><?php p($l->t('Elapsed time:')); ?>
                 <span id="timesheets-elapsed" data-seconds="<?php p((string) $_['activeShift']['elapsedSeconds']); ?>"><?php p(sprintf('%dh %02dm %02ds', intdiv($_['activeShift']['elapsedSeconds'], 3600), intdiv($_['activeShift']['elapsedSeconds'] % 3600, 60), $_['activeShift']['elapsedSeconds'] % 60)); ?></span>
@@ -48,6 +50,8 @@ $entries = $_['entries'];
             <form id="timesheets-clock-form" method="post" action="<?php p($_['activeShift'] === null ? $_['clockInUrl'] : $_['clockOutUrl']); ?>">
                 <?php if ($_['activeShift'] !== null): ?>
                     <input type="hidden" name="shiftId" value="<?php p((string) $_['activeShift']['id']); ?>">
+                <?php elseif ($_['locationSettings']['shiftEnabled']): ?>
+                    <?php $locationOptions = $_['shiftLocationOptions']; $locationScope = 'shift'; include __DIR__ . '/location-picker.php'; ?>
                 <?php endif; ?>
                 <button type="submit" class="primary"><?php p($l->t($_['activeShift'] === null ? 'Clock in' : 'Clock out')); ?></button>
                 <p id="timesheets-clock-status" role="status" aria-live="polite"></p>
@@ -62,6 +66,7 @@ $entries = $_['entries'];
     <section class="timesheets-notice" aria-labelledby="timesheets-job-title">
         <h2 id="timesheets-job-title"><?php p($l->t('Your current job')); ?></h2>
         <?php if ($_['activeJob'] !== null): ?>
+            <p><?php p($l->t('Work location: %s', [$_['activeJob']['location']])); ?></p>
             <p><?php p($l->t('Active job: %s', [$_['activeJob']['reference']])); ?></p>
             <p><?php p($l->t('Started %s.', [$_['activeJob']['startedAt']])); ?></p>
             <p class="timesheets-elapsed"><?php p($l->t('Job elapsed time:')); ?>
@@ -86,6 +91,9 @@ $entries = $_['entries'];
                 <?php else: ?>
                     <label for="timesheets-job-reference"><?php p($l->t('Job ID')); ?></label>
                     <input id="timesheets-job-reference" name="reference" type="text" required maxlength="255" aria-describedby="timesheets-job-help">
+                    <?php if ($_['locationSettings']['jobEnabled']): ?>
+                        <?php $locationOptions = $_['jobLocationOptions']; $locationScope = 'job'; include __DIR__ . '/location-picker.php'; ?>
+                    <?php endif; ?>
                 <?php endif; ?>
                 <button type="submit" class="primary"><?php p($l->t($_['activeJob'] === null ? 'Start job' : 'End job')); ?></button>
                 <p role="status" aria-live="polite"></p>
@@ -136,6 +144,7 @@ $entries = $_['entries'];
                         <th scope="col"><?php p($l->t('Reported duration')); ?></th>
                         <th scope="col"><?php p($l->t('Saved rounding rule')); ?></th>
                         <th scope="col"><?php p($l->t('Status')); ?></th>
+                        <th scope="col"><?php p($l->t('Work location')); ?></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -154,6 +163,7 @@ $entries = $_['entries'];
                                     <?php p($l->t($entry['status'])); ?>
                                 </span>
                             </td>
+                            <td><?php p($l->t($entry['location'])); ?></td>
                         </tr>
                     <?php endforeach; ?>
                 </tbody>
@@ -177,6 +187,7 @@ $entries = $_['entries'];
                     <th scope="col"><?php p($l->t('Actual duration')); ?></th>
                     <th scope="col"><?php p($l->t('Reported duration')); ?></th>
                     <th scope="col"><?php p($l->t('Saved rounding rule')); ?></th>
+                    <th scope="col"><?php p($l->t('Work location')); ?></th>
                 </tr></thead>
                 <tbody>
                 <?php foreach ($_['jobEntries'] as $entry): ?>
@@ -188,6 +199,7 @@ $entries = $_['entries'];
                         <td><?php p($entry['total'] ?? $l->t('Not finalized')); ?></td>
                         <td><?php p($entry['reported'] ?? $l->t('Not finalized')); ?></td>
                         <td><?php p($entry['clockOut'] === null ? $l->t('Set at clock-out') : ($entry['roundingInterval'] === null ? $l->t('Not captured (actual)') : ($entry['roundingInterval'] === 0 ? $l->t('Off (actual)') : $l->t('Nearest %s minutes; halfway up', [(string) $entry['roundingInterval']])))); ?></td>
+                        <td><?php p($l->t($entry['location'])); ?></td>
                     </tr>
                 <?php endforeach; ?>
                 </tbody>

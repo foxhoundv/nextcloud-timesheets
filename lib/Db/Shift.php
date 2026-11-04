@@ -18,6 +18,7 @@ class Shift extends Entity {
     protected $durationSeconds;
     protected $roundingInterval;
     protected $roundedSeconds;
+    protected $workLocation;
 
     public function __construct() {
         $this->addType('durationMinutes', 'integer');

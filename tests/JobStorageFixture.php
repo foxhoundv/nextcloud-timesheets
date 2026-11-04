@@ -21,10 +21,11 @@ class JobStorageFixture {
         foreach ([
             'storage_owner', 'payroll_storage_root', 'sales_order_storage_root',
             'job_reference_format', 'job_year_base', 'job_folder_template',
-            'job_group_first_end', 'job_group_size', 'job_group_name_format', 'payroll_week_start',
+            'job_group_first_end', 'job_group_size', 'job_group_name_format', 'payroll_week_start', 'work_locations',
         ] as $key) {
             $this->previous[$key] = in_array($key, $existing, true) ? $config->getAppValue('timesheets', $key) : null;
         }
+        $config->deleteAppValue('timesheets', 'work_locations');
         $name = 'timesheets-job-storage-' . bin2hex(random_bytes(6));
         $this->folder = Server::get(IRootFolder::class)->getUserFolder($ownerId)->newFolder($name);
         $this->folder->newFolder('Payroll');

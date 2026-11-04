@@ -24,6 +24,7 @@ class JobClockService {
         private RoundingService $rounding,
         private StorageService $storage,
         private LoggerInterface $logger,
+        private LocationService $locations,
     ) {
     }
 
@@ -49,16 +50,17 @@ class JobClockService {
             'reference' => $job->getJobReference(),
             'startedAt' => $start->setTimezone(new \DateTimeZone($job->getTimeZone()))->format('Y-m-d H:i:s T'),
             'elapsedSeconds' => max(0, $this->time->getTime() - $start->getTimestamp()),
+            'location' => LocationService::label($job->getWorkLocation()),
         ];
     }
 
-    public function clockIn(string $userId, string $reference): Job {
+    public function clockIn(string $userId, string $reference, ?string $country = null, ?string $region = null): Job {
         $reference = trim($reference);
         if ($reference === '' || !mb_check_encoding($reference, 'UTF-8')
             || mb_strlen($reference) > 255 || preg_match('/[\x00-\x1f\x7f]/u', $reference)) {
             throw new \DomainException('Enter a job reference of 1 to 255 characters without control characters.', 400);
         }
-        return $this->transaction->run($userId, function () use ($userId, $reference): Job {
+        return $this->transaction->run($userId, function () use ($userId, $reference, $country, $region): Job {
             if (!$this->isEnabled() || !$this->access->permissions($userId)['job']) {
                 throw new \DomainException('Job tracking is disabled or you do not have permission to start jobs.', 403);
             }
@@ -77,6 +79,16 @@ class JobClockService {
             $job->setTimeZone($zone->getName());
             $job->setJobDate($now->setTimezone($zone)->format('Y-m-d'));
             $job->setClockIn($now->format('Y-m-d H:i:s'));
+            $location = $this->locations->capture('job', $country, $region, $this->shifts->findOpenForUser($userId)?->getWorkLocation());
+            if ($location !== null) {
+                foreach ($this->jobs->findByReference($reference) as $previous) {
+                    if ($previous->getWorkLocation() !== null
+                        && LocationService::key($previous->getWorkLocation()) !== LocationService::key($location)) {
+                        throw new \DomainException('This Job ID already has a different recorded work location. Choose its existing location or contact your administrator.', 409);
+                    }
+                }
+            }
+            $job->setWorkLocation($location);
             $job = $this->jobs->insert($job);
             $this->storage->synchronizeJob($reference);
             return $job;

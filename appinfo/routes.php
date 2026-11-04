@@ -7,6 +7,7 @@ return [
         ['name' => 'page#index', 'url' => '/', 'verb' => 'GET'],
         ['name' => 'adminPage#index', 'url' => '/admin', 'verb' => 'GET'],
         ['name' => 'admin#save', 'url' => '/settings', 'verb' => 'POST'],
+        ['name' => 'location#save', 'url' => '/settings/locations', 'verb' => 'POST'],
         ['name' => 'storage#save', 'url' => '/settings/storage', 'verb' => 'POST'],
         ['name' => 'storage#payroll', 'url' => '/reports/payroll', 'verb' => 'POST'],
         ['name' => 'access#save', 'url' => '/settings/access', 'verb' => 'POST'],

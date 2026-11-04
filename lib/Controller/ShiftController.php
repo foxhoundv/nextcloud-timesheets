@@ -24,8 +24,8 @@ class ShiftController extends Controller {
     }
 
     #[NoAdminRequired]
-    public function clockIn(): JSONResponse {
-        return $this->record(null);
+    public function clockIn(?string $country = null, ?string $region = null): JSONResponse {
+        return $this->record(null, $country, $region);
     }
 
     #[NoAdminRequired]
@@ -33,7 +33,7 @@ class ShiftController extends Controller {
         return $this->record($shiftId);
     }
 
-    private function record(?int $shiftId): JSONResponse {
+    private function record(?int $shiftId, ?string $country = null, ?string $region = null): JSONResponse {
         $user = $this->userSession->getUser();
         if ($user === null) {
             return new JSONResponse(['message' => $this->l->t('Please sign in to record time.')], 401);
@@ -41,7 +41,7 @@ class ShiftController extends Controller {
         $longShiftConfirmation = false;
         try {
             if ($shiftId === null) {
-                $this->clock->clockIn($user->getUID());
+                $this->clock->clockIn($user->getUID(), $country, $region);
             } else {
                 $longShiftConfirmation = $this->clock->clockOut($user->getUID(), $shiftId);
             }
